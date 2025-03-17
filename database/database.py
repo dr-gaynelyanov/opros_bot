@@ -33,3 +33,6 @@ def create_user(db, telegram_id: int, username: str, first_name: str,
 
 def get_user_by_telegram_id(db, telegram_id: int):
     return db.query(User).filter(User.telegram_id == telegram_id).first()
+
+def get_admins(db):
+    return db.query(User).filter(User.is_admin == True).all()
