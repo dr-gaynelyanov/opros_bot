@@ -1,5 +1,6 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 from database.models import Base, User, Poll, Question, PollResponse, QuestionResponse
 from datetime import datetime
 from typing import List, Optional
@@ -61,4 +62,10 @@ def remove_admin(db, telegram_id: int) -> Optional[User]:
 def is_admin(db, telegram_id: int) -> bool:
     user = get_user_by_telegram_id(db, telegram_id)
     return user.is_admin if user else False
+
+def get_admin_count(db: Session) -> int:
+    """
+    Возвращает количество администраторов в системе
+    """
+    return db.query(User).filter(User.is_admin == True).count()
 
