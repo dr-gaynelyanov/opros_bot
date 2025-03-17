@@ -4,14 +4,24 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from keyboards.reply import get_contact_keyboard
 from states.user_states import UserRegistration
-from database.database import get_db, create_user
+from database.database import get_db, create_user, get_user_by_telegram_id
 import logging
 import re
+from sqlalchemy.orm import Session
 
 common_router = Router()
 
 @common_router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext, db: Session):
+    user = get_user_by_telegram_id(db, message.from_user.id)
+    
+    if user:
+        await message.answer(
+            f"С возвращением, {user.first_name}! 👋\n"
+            "Вы уже зарегистрированы в системе."
+        )
+        return
+    
     await state.set_state(UserRegistration.waiting_for_contact)
     await message.answer(
         "👋 Привет! Я бот для проведения онлайн опросов.\n\n"
