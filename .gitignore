@@ -1,0 +1,17 @@
+# Виртуальное окружение
+venv/
+
+# Документация
+docs/
+
+# Переменные окружения
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.idea/
+.vscode/ 
