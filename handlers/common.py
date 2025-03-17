@@ -4,6 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from keyboards.reply import get_contact_keyboard
 from states.user_states import UserRegistration
+from database.database import get_db, create_user
 import logging
 import re
 
@@ -96,10 +97,27 @@ async def handle_email(message: Message, state: FSMContext):
     user_info = data['user_info']
     user_info['email'] = email
     
+    db = next(get_db())
+    try:
+        db_user = create_user(
+            db=db,
+            telegram_id=user_info['user_id'],
+            username=user_info['username'],
+            first_name=user_info['first_name'],
+            last_name=user_info['last_name'],
+            phone=user_info['phone'],
+            email=email
+        )
+        logging.info(f"Пользователь успешно создан в базе данных: {db_user.id}")
+    except Exception as e:
+        logging.error(f"Ошибка при создании пользователя: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при регистрации. Пожалуйста, попробуйте позже."
+        )
+        return
+    
     await state.set_state(UserRegistration.registration_complete)
 
-    logging.info(f"Успешная регистрация email для пользователя {user_info['username']}: {email}")
-    
     await message.answer(
         f"✅ Отлично! Регистрация завершена.\n\n"
         f"Ваши данные:\n"
