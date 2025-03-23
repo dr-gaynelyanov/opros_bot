@@ -83,3 +83,20 @@ def get_admin_start_keyboard() -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
     return keyboard
+
+
+def get_admin_question_control_keyboard(poll_id: int, question_id: int) -> InlineKeyboardMarkup:
+    """
+    Создает клавиатуру управления вопросом для администратора
+    """
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="⏹ Завершить прием ответов",
+                callback_data=f"finish_question_{poll_id}_{question_id}"
+            )
+        ]
+    ])
+    return keyboard
+
+

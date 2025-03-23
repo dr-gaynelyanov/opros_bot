@@ -7,4 +7,6 @@ class CreatePollStates(StatesGroup):
     waiting_for_questions_file = State()
 
 class PollPassing(StatesGroup):
-    selected_options = State()
+    current_question_index = State()
+    questions_list = State()
+    poll_id = State()

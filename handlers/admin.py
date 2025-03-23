@@ -1,5 +1,6 @@
 from database.models import Poll
-from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard
+from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard, \
+    get_admin_question_control_keyboard
 from aiogram import Router, types, F, Bot
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
@@ -17,6 +18,7 @@ from database.models import Question
 
 admin_router = Router()
 
+
 def get_confirm_keyboard(action: str) -> InlineKeyboardMarkup:
     keyboard = [
         [
@@ -26,23 +28,24 @@ def get_confirm_keyboard(action: str) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-async def process_user_id_input(message: types.Message, state: FSMContext, db: Session, 
-                              is_admin_action: bool, current_user_id: int) -> bool:
+
+async def process_user_id_input(message: types.Message, state: FSMContext, db: Session,
+                                is_admin_action: bool, current_user_id: int) -> bool:
     try:
         user_id = int(message.text)
     except ValueError:
         await message.answer("❌ Пожалуйста, введите корректный ID пользователя (только цифры).")
         return False
-    
+
     if is_admin_action and user_id == current_user_id:
         await message.answer("❌ Вы не можете удалить самого себя из администраторов.")
         return False
-    
+
     user = get_user_by_telegram_id(db, user_id)
     if not user:
         await message.answer("❌ Пользователь с таким ID не найден в базе данных.")
         return False
-    
+
     if is_admin_action:
         if not is_admin(db, user_id):
             await message.answer("❌ Этот пользователь не является администратором.")
@@ -51,21 +54,22 @@ async def process_user_id_input(message: types.Message, state: FSMContext, db: S
         if is_admin(db, user_id):
             await message.answer("❌ Этот пользователь уже является администратором.")
             return False
-    
+
     await state.update_data(user_id=user_id)
     return True
 
-@admin_router.message(Command("admin"))
 
+@admin_router.message(Command("admin"))
 async def admin_command(message: types.Message, db: Session):
     if not is_admin(db, message.from_user.id):
         await message.answer("У вас нет доступа к этой команде.")
         return
-    
+
     await message.answer(
         "Панель управления администратора",
         reply_markup=get_admin_start_inline_keyboard()
     )
+
 
 @admin_router.callback_query(lambda c: c.data == "start_poll")
 async def process_start_poll(callback: types.CallbackQuery, state: FSMContext, db: Session):
@@ -81,6 +85,7 @@ async def process_start_poll(callback: types.CallbackQuery, state: FSMContext, d
         reply_markup=get_polls_keyboard(polls)
     )
 
+
 @admin_router.callback_query(F.data.startswith("select_poll_"))
 async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, db: Session, bot: Bot):
     poll_id = int(callback.data.split("_")[-1])
@@ -89,60 +94,121 @@ async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, 
     if not poll:
         await callback.message.edit_text("❌ Опрос не найден.")
         return
-    
+
     await callback.message.edit_text(
         f"Код доступа к опросу '{poll.title}':\n\n`{poll.access_code}`",
         parse_mode="Markdown",
         reply_markup=get_send_first_question_keyboard(poll.id)
     )
 
+
 @admin_router.callback_query(F.data.startswith("send_first_question_"))
-async def process_send_first_question(callback: types.CallbackQuery, bot: Bot, db: Session):
+async def process_send_first_question(callback: types.CallbackQuery, bot: Bot, db: Session, state: FSMContext):
     poll_id = int(callback.data.split("_")[-1])
 
-    # Get the first question for the poll
-    question = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).first()
-
-    if not question:
+    # Получаем все вопросы опроса
+    questions = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).all()
+    if not questions:
         await callback.message.answer("❌ В этом опросе пока нет вопросов.")
         return
 
-    # Get the poll object
-    poll = db.query(Poll).filter(Poll.id == poll_id).first()
-    if not poll:
-        await callback.message.answer("❌ Опрос не найден.")
+    # Сохраняем данные в FSM
+    await state.update_data(
+        questions_list=[q.id for q in questions],
+        current_question_index=0,
+        poll_id=poll_id
+    )
+
+    # Отправляем первый вопрос
+    await send_next_question(callback, bot, db, state)
+
+
+async def send_next_question(callback: types.CallbackQuery, bot: Bot, db: Session, state: FSMContext):
+    data = await state.get_data()
+    questions_list = data.get('questions_list', [])
+    current_index = data.get('current_question_index', 0)
+    poll_id = data.get('poll_id')
+
+    if current_index >= len(questions_list):
+        await callback.message.answer("Все вопросы уже отправлены")
         return
 
-    # Get list of users who joined the poll (PollResponse)
+    question_id = questions_list[current_index]
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question:
+        await callback.message.answer(f"❌ Вопрос {current_index + 1} не найден")
+        return
+
+    # Получаем пользователей опроса
     user_ids = get_users_by_poll_id(db, poll_id)
-
     if not user_ids:
-        await callback.message.answer("❌ К этому опросу еще никто не присоединился.")
+        await callback.message.answer("❌ Нет пользователей для опроса")
         return
 
-    answer_options = question.options
-    question_text = question.text
+    # Формируем сообщение для админа
+    admin_message = (
+        f"**Вопрос {current_index + 1}:** {question.text}\n"
+        "**Варианты ответов:**\n"
+    )
 
-    admin_message = f"**Вопрос:** {question_text}\n\n**Варианты ответов:**\n"
-    for i, option in enumerate(answer_options):
-        admin_message += f"{i+1}. {option}\n"
+    admin_keyboard = get_admin_question_control_keyboard(poll_id, question.id)
 
+    for i, option in enumerate(question.options, 1):
+        admin_message += f"{i}. {option}\n"
     admin_message += "\n**Правильные ответы:**\n"
-    if question.correct_answers:
-        for i, option in enumerate(question.correct_answers):
-            admin_message += f"{i+1}. {option}\n"
-    else:
-        admin_message += "Нет правильных ответов.\n"
+    for i, answer in enumerate(question.correct_answers, 1):
+        admin_message += f"{i}. {answer}\n"
 
-    await callback.message.answer(admin_message, parse_mode="Markdown")
-
+    # Отправляем вопрос пользователям
+    success_count = 0
     for user_id in user_ids:
         try:
-            await send_question(user_id, question_text, answer_options, poll_id, question.id, bot)
+            await send_question(
+                student_id=user_id,
+                question_text=question.text,
+                answer_options=question.options,
+                poll_id=poll_id,
+                question_id=question.id,
+                bot=bot
+            )
+            success_count += 1
         except Exception as e:
-            logging.error(f"Не удалось отправить вопрос пользователю {user_id}: {e}")
+            logging.error(f"Ошибка отправки вопроса {question.id} пользователю {user_id}: {e}")
 
-    await callback.message.answer(f"Первый вопрос отправлен {len(user_ids)} пользователям!")
+    # Обновляем состояние
+    await state.update_data(current_question_index=current_index + 1)
+
+    # Отправляем подтверждение администратору
+    await callback.message.answer(
+        text=f"✅ Вопрос {current_index + 1} отправлен {success_count}/{len(user_ids)} пользователям",
+    )
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text=admin_message,
+        parse_mode="Markdown",
+        reply_markup=admin_keyboard
+    )
+
+
+@admin_router.callback_query(F.data.startswith("finish_question_"))
+async def process_finish_question(callback: types.CallbackQuery, db: Session):
+    poll_id, question_id = map(int, callback.data.split("_")[2:])
+
+    # Получаем вопрос из БД
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question:
+        await callback.answer("Вопрос не найден", show_alert=True)
+        return
+
+    # Завершаем прием ответов (пример логики)
+    question.is_active = False  # Требуется добавить это поле в модель
+    db.commit()
+
+    await callback.message.answer(
+        f"✅ Прием ответов на вопрос {question.order} завершен",
+        reply_markup=None
+    )
+
 
 
 @admin_router.callback_query(lambda c: c.data == "create_poll")
@@ -150,11 +216,13 @@ async def process_create_poll(callback: types.CallbackQuery, state: FSMContext, 
     await state.set_state(CreatePollStates.waiting_for_poll_title)
     await callback.message.edit_text("Пожалуйста, введите название опроса:")
 
+
 @admin_router.message(CreatePollStates.waiting_for_poll_title)
 async def process_poll_title(message: types.Message, state: FSMContext):
     await state.update_data(poll_title=message.text)
     await state.set_state(CreatePollStates.waiting_for_poll_description)
     await message.answer("Теперь, пожалуйста, введите описание опроса:")
+
 
 @admin_router.message(CreatePollStates.waiting_for_poll_description)
 async def process_poll_description(message: types.Message, state: FSMContext, db: Session):
@@ -164,7 +232,7 @@ async def process_poll_description(message: types.Message, state: FSMContext, db
     user_id = message.from_user.id
 
     poll = create_poll_db(db, title=poll_title, description=poll_description, created_by=user_id)
-    
+
     await state.update_data(poll_description=poll_description, poll_id=poll.id)
     await state.set_state(CreatePollStates.poll_created)
     await message.answer(
@@ -172,6 +240,7 @@ async def process_poll_description(message: types.Message, state: FSMContext, db
         "Теперь вы можете добавить вопросы к опросу.",
         reply_markup=get_add_questions_keyboard(poll.id)
     )
+
 
 @admin_router.callback_query(F.data.startswith("add_questions_"))
 async def process_add_questions(callback: types.CallbackQuery, state: FSMContext, db: Session):
@@ -198,6 +267,7 @@ async def process_add_questions(callback: types.CallbackQuery, state: FSMContext
         "```",
         parse_mode="Markdown"
     )
+
 
 @admin_router.message(CreatePollStates.waiting_for_questions_file, F.document)
 async def process_questions_file(message: types.Message, state: FSMContext, db: Session):
@@ -227,7 +297,8 @@ async def process_questions_file(message: types.Message, state: FSMContext, db: 
             return
 
         for question_data in questions:
-            create_question(db, poll_id, question_data['text'], question_data['options'], question_data['correct_answers'], question_data['order'])
+            create_question(db, poll_id, question_data['text'], question_data['options'],
+                            question_data['correct_answers'], question_data['order'])
 
         await message.answer(f"✅ Вопросы успешно добавлены к опросу!", reply_markup=ReplyKeyboardRemove())
         await state.clear()
@@ -241,17 +312,19 @@ async def process_questions_file(message: types.Message, state: FSMContext, db: 
         )
         await state.clear()
 
+
 @admin_router.callback_query(lambda c: c.data == "add_admin")
 async def process_add_admin(callback: types.CallbackQuery, state: FSMContext, db: Session):
     if not is_admin(db, callback.from_user.id):
         await callback.answer("У вас нет прав для выполнения этого действия.", show_alert=True)
         return
-    
+
     await state.set_state(AdminStates.waiting_for_user_id)
     await callback.message.edit_text(
         "Пожалуйста, введите ID пользователя, которого хотите сделать администратором.\n"
         "ID можно получить, переслав сообщение от пользователя боту @getidsbot"
     )
+
 
 @admin_router.message(AdminStates.waiting_for_user_id)
 async def process_user_id(message: types.Message, state: FSMContext, db: Session):
@@ -259,7 +332,7 @@ async def process_user_id(message: types.Message, state: FSMContext, db: Session
         data = await state.get_data()
         user_id = data['user_id']
         user = get_user_by_telegram_id(db, user_id)
-        
+
         await state.set_state(AdminStates.confirming_add_admin)
         await message.answer(
             f"Вы уверены, что хотите сделать администратором пользователя:\n"
@@ -269,11 +342,12 @@ async def process_user_id(message: types.Message, state: FSMContext, db: Session
             reply_markup=get_confirm_keyboard("add_admin")
         )
 
+
 @admin_router.callback_query(lambda c: c.data == "confirm_add_admin", AdminStates.confirming_add_admin)
 async def process_confirm_add_admin(callback: types.CallbackQuery, state: FSMContext, db: Session):
     data = await state.get_data()
     user_id = data['user_id']
-    
+
     user = add_admin(db, user_id)
     if user:
         await callback.message.edit_text(
@@ -284,30 +358,33 @@ async def process_confirm_add_admin(callback: types.CallbackQuery, state: FSMCon
         await callback.message.edit_text(
             "❌ Произошла ошибка при добавлении администратора."
         )
-    
+
     await state.clear()
+
 
 @admin_router.callback_query(lambda c: c.data == "cancel_add_admin", AdminStates.confirming_add_admin)
 async def process_cancel_add_admin(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Добавление администратора отменено.")
     await state.clear()
 
+
 @admin_router.callback_query(lambda c: c.data == "remove_admin")
 async def process_remove_admin(callback: types.CallbackQuery, state: FSMContext, db: Session):
     if not is_admin(db, callback.from_user.id):
         await callback.answer("У вас нет прав для выполнения этого действия.", show_alert=True)
         return
-    
+
     admin_count = get_admin_count(db)
     if admin_count <= 1:
         await callback.answer("❌ Невозможно удалить последнего администратора!", show_alert=True)
         return
-    
+
     await state.set_state(AdminStates.waiting_for_admin_id)
     await callback.message.edit_text(
         "Пожалуйста, введите ID администратора, которого хотите удалить.\n"
         "ID можно получить, переслав сообщение от пользователя боту @getidsbot"
     )
+
 
 @admin_router.message(AdminStates.waiting_for_admin_id)
 async def process_admin_id(message: types.Message, state: FSMContext, db: Session):
@@ -315,7 +392,7 @@ async def process_admin_id(message: types.Message, state: FSMContext, db: Sessio
         data = await state.get_data()
         user_id = data['user_id']
         user = get_user_by_telegram_id(db, user_id)
-        
+
         await state.set_state(AdminStates.confirming_remove_admin)
         await message.answer(
             f"Вы уверены, что хотите удалить из администраторов пользователя:\n"
@@ -325,11 +402,12 @@ async def process_admin_id(message: types.Message, state: FSMContext, db: Sessio
             reply_markup=get_confirm_keyboard("remove_admin")
         )
 
+
 @admin_router.callback_query(lambda c: c.data == "confirm_remove_admin", AdminStates.confirming_remove_admin)
 async def process_confirm_remove_admin(callback: types.CallbackQuery, state: FSMContext, db: Session):
     data = await state.get_data()
     user_id = data['user_id']
-    
+
     user = remove_admin(db, user_id)
     if user:
         await callback.message.edit_text(
@@ -340,25 +418,27 @@ async def process_confirm_remove_admin(callback: types.CallbackQuery, state: FSM
         await callback.message.edit_text(
             "❌ Произошла ошибка при удалении администратора."
         )
-    
+
     await state.clear()
+
 
 @admin_router.callback_query(lambda c: c.data == "cancel_remove_admin", AdminStates.confirming_remove_admin)
 async def process_cancel_remove_admin(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Удаление администратора отменено.")
     await state.clear()
 
+
 @admin_router.callback_query(lambda c: c.data == "list_admins")
 async def process_list_admins(callback: types.CallbackQuery, db: Session):
     if not is_admin(db, callback.from_user.id):
         await callback.answer("У вас нет прав для выполнения этого действия.", show_alert=True)
         return
-    
+
     admins = get_admins(db)
     if not admins:
         await callback.message.edit_text("В системе пока нет администраторов.")
         return
-    
+
     admin_list_str = "📋 Список администраторов:\n\n"
     for admin in admins:
         admin_list_str += (
@@ -370,5 +450,5 @@ async def process_list_admins(callback: types.CallbackQuery, db: Session):
             f"Дата регистрации: {admin.created_at.strftime('%d.%m.%Y %H:%M')}\n"
             f"-------------------\n"
         )
-    
+
     await callback.message.edit_text(admin_list_str)

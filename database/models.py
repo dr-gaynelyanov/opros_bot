@@ -43,6 +43,7 @@ class Question(Base):
     options = Column(JSON)  # Список вариантов ответов
     correct_answers = Column(JSON)  # Список правильных ответов
     order = Column(Integer)  # Порядок вопроса в опросе
+    is_active = Column(Boolean, default=True)
     
     poll = relationship("Poll", back_populates="questions")
     responses = relationship("QuestionResponse", back_populates="question")
