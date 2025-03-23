@@ -1,7 +1,7 @@
 from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
-from database.database import get_db, get_answer_options
+from database.database import get_db, get_answer_options, create_question_response
 from database.models import Poll
 from sqlalchemy.orm import Session
 import logging
@@ -35,6 +35,7 @@ def create_answer_keyboard(answer_options: list, poll_id: int, question_id: int,
         else:
             text = option
         keyboard.append([InlineKeyboardButton(text=text, callback_data=f"answer:{poll_id}:{question_id}:{option.replace(':', '__COLON__')}")])
+    keyboard.append([InlineKeyboardButton(text="💾 Сохранить ответ", callback_data=f"save_answer:{poll_id}:{question_id}")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 @poll_router.callback_query(F.data.startswith("answer:"))
@@ -74,3 +75,31 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext, db: S
         logging.error(f"Не удалось отредактировать сообщение: {e}")
 
     await callback.answer()
+
+@poll_router.callback_query(F.data.startswith("save_answer:"))
+async def process_save_answer(callback: types.CallbackQuery, state: FSMContext, db: Session):
+    """
+    Обрабатывает сохранение ответа пользователя.
+    """
+    data = callback.data.split(":")
+    poll_id = int(data[1])
+    question_id = int(data[2])
+    user_id = callback.from_user.id
+
+    # Get selected options from state
+    state_data = await state.get_data()
+    selected_options = state_data.get(f"selected_options:{poll_id}:{question_id}", []) or []
+
+    # При сохранении ответа нельзя отправлять правильный он или нет, просто пишем что ответ сохранен
+
+    create_question_response(db, poll_id, user_id, question_id, selected_options)
+
+    # Remove keyboard
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception as e:
+        logging.error(f"Не удалось удалить клавиатуру: {e}")
+
+    # Send confirmation message
+    await callback.message.edit_text("✅ Ответ сохранен, ожидайте следующего вопроса.")
+    await state.clear()

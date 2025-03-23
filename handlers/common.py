@@ -52,7 +52,7 @@ async def process_access_code(message: Message, state: FSMContext, db: Session):
     if poll:
         create_poll_response(db, poll.id, message.from_user.id)
         await message.answer(f"✅ Вы успешно присоединились к опросу '{poll.title}'!")
-        # TODO: Add user to the poll participants list, start the poll, etc.
+        # Пользователь получает вопрос только после того как админ его отправит
         await state.clear()
     else:
         await message.answer("❌ Опрос с таким кодом доступа не найден. Пожалуйста, проверьте код и попробуйте снова.")
