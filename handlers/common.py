@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboard, get_user_start_keyboard
 from states.user_states import UserRegistration
-from database.database import get_db, create_user, get_user_by_telegram_id, is_admin, get_poll_by_access_code
+from database.database import get_db, create_user, get_user_by_telegram_id, is_admin, get_poll_by_access_code, create_poll_response
 import logging
 import re
 from sqlalchemy.orm import Session
@@ -48,6 +48,7 @@ async def process_access_code(message: Message, state: FSMContext, db: Session):
     poll = get_poll_by_access_code(db, access_code)
 
     if poll:
+        create_poll_response(db, poll.id, message.from_user.id)
         await message.answer(f"✅ Вы успешно присоединились к опросу '{poll.title}'!")
         # TODO: Add user to the poll participants list, start the poll, etc.
         await state.clear()

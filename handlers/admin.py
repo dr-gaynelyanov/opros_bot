@@ -11,7 +11,7 @@ from states.admin_states import AdminStates
 from states.poll_states import CreatePollStates
 from utils.poll_parser import parse_poll_from_file
 import logging
-from keyboards.reply import get_polls_keyboard
+from keyboards.reply import get_polls_keyboard, get_send_first_question_keyboard
 
 admin_router = Router()
 
@@ -88,7 +88,11 @@ async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, 
         await callback.message.edit_text("❌ Опрос не найден.")
         return
     
-    await callback.message.edit_text(f"Код доступа к опросу '{poll.title}':\n\n`{poll.access_code}`", parse_mode="Markdown")
+    await callback.message.edit_text(
+        f"Код доступа к опросу '{poll.title}':\n\n`{poll.access_code}`",
+        parse_mode="Markdown",
+        reply_markup=get_send_first_question_keyboard(poll.id)
+    )
 
 
 @admin_router.callback_query(lambda c: c.data == "create_poll")

@@ -13,6 +13,17 @@ def get_contact_keyboard() -> ReplyKeyboardMarkup:
     )
     return keyboard
 
+def get_send_first_question_keyboard(poll_id: int) -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру с кнопкой "Отправить первый вопрос"
+    """
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="🚀 Отправить первый вопрос", callback_data=f"send_first_question_{poll_id}")
+        ]]
+    )
+    return keyboard
+
 def get_user_start_keyboard() -> InlineKeyboardMarkup:
     """
     Создает инлайн-клавиатуру для обычных пользователей при команде /start

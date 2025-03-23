@@ -115,3 +115,16 @@ def get_poll_by_access_code(db: Session, access_code: str) -> Optional[Poll]:
     Возвращает опрос по коду доступа.
     """
     return db.query(Poll).filter(Poll.access_code == access_code).first()
+
+def create_poll_response(db: Session, poll_id: int, user_id: int):
+    """
+    Создает запись об участии пользователя в опросе.
+    """
+    db_poll_response = PollResponse(
+        poll_id=poll_id,
+        user_id=user_id
+    )
+    db.add(db_poll_response)
+    db.commit()
+    db.refresh(db_poll_response)
+    return db_poll_response
