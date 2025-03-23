@@ -1,5 +1,6 @@
 from utils.poll_parser import parse_poll_from_file
 
+
 def test_parse_poll_from_file_valid_input():
     file_content = """
     1. Что делает оператор `break` в цикле?
