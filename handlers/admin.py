@@ -123,6 +123,19 @@ async def process_send_first_question(callback: types.CallbackQuery, bot: Bot, d
     answer_options = question.options
     question_text = question.text
 
+    admin_message = f"**Вопрос:** {question_text}\n\n**Варианты ответов:**\n"
+    for i, option in enumerate(answer_options):
+        admin_message += f"{i+1}. {option}\n"
+
+    admin_message += "\n**Правильные ответы:**\n"
+    if question.correct_answers:
+        for i, option in enumerate(question.correct_answers):
+            admin_message += f"{i+1}. {option}\n"
+    else:
+        admin_message += "Нет правильных ответов.\n"
+
+    await callback.message.answer(admin_message, parse_mode="Markdown")
+
     for user_id in user_ids:
         try:
             await send_question(user_id, question_text, answer_options, poll_id, question.id, bot)
