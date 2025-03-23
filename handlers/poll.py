@@ -2,7 +2,7 @@ from aiogram import Router, types, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from database.database import get_db, get_answer_options, create_question_response, get_users_by_poll_id
-from database.models import Poll, Question
+from database.models import Poll, Question, QuestionResponse, PollResponse
 from sqlalchemy.orm import Session
 import logging
 from states.poll_states import PollPassing
@@ -114,3 +114,35 @@ async def process_save_answer(callback: types.CallbackQuery, state: FSMContext, 
     # Send confirmation message
     await callback.message.edit_text("✅ Ответ сохранен, ожидайте следующего вопроса.")
     await state.clear()
+
+
+async def send_results_for_question(question: Question, db: Session, bot: Bot):
+    poll = question.poll
+    user_ids = get_users_by_poll_id(db, poll.id)
+    correct_answers = ", ".join(question.correct_answers)
+
+    for user_id in user_ids:
+        # Получаем ответ пользователя
+        response = (db.query(QuestionResponse)
+                    .join(PollResponse)
+                    .filter(
+            PollResponse.poll_id == poll.id,
+                        PollResponse.user_id == user_id,
+                        QuestionResponse.question_id == question.id
+                    )
+                    .order_by(QuestionResponse.id.desc())  # Сортировка по убыванию ID
+                    .first())  # Получение первой записи после сортировки
+
+        if not response:
+            await bot.send_message(user_id, text=f"Вы не ответили на вопрос {question.order}")
+            return
+
+        user_answers = ", ".join(response.selected_answers)
+        result = "✅ Правильно" if response.is_correct else "❌ Неправильно"
+
+        message = f"📊 Результат по вопросу:\n**Вопрос:** {question.text}\n**Ваш ответ:** {user_answers}\n**Правильный ответ:** {correct_answers}\n**Итог:** {result}"
+
+        try:
+            await bot.send_message(user_id, message, parse_mode="Markdown")
+        except Exception as e:
+            logging.error(f"Ошибка при отправке результатов {user_id}: {e}")

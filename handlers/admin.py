@@ -13,7 +13,7 @@ from states.poll_states import CreatePollStates
 from utils.poll_parser import parse_poll_from_file
 import logging
 from keyboards.reply import get_polls_keyboard, get_send_first_question_keyboard
-from handlers.poll import send_question
+from handlers.poll import send_question, send_results_for_question
 from database.models import Question
 
 admin_router = Router()
@@ -135,6 +135,10 @@ async def send_next_question(callback: types.CallbackQuery, bot: Bot, db: Sessio
 
     question_id = questions_list[current_index]
     question = db.query(Question).filter(Question.id == question_id).first()
+
+    question.is_active = True
+    db.commit()
+
     if not question:
         await callback.message.answer(f"❌ Вопрос {current_index + 1} не найден")
         return
@@ -182,17 +186,19 @@ async def send_next_question(callback: types.CallbackQuery, bot: Bot, db: Sessio
     await callback.message.answer(
         text=f"✅ Вопрос {current_index + 1} отправлен {success_count}/{len(user_ids)} пользователям",
     )
-    await bot.send_message(
+    question_details_message = await bot.send_message(
         chat_id=callback.from_user.id,
         text=admin_message,
         parse_mode="Markdown",
         reply_markup=admin_keyboard
     )
+    await state.update_data(question_details_message=question_details_message)
 
 
 @admin_router.callback_query(F.data.startswith("finish_question_"))
-async def process_finish_question(callback: types.CallbackQuery, db: Session):
+async def process_finish_question(callback: types.CallbackQuery, db: Session, bot: Bot, state: FSMContext):
     poll_id, question_id = map(int, callback.data.split("_")[2:])
+    data = await state.get_data()
 
     # Получаем вопрос из БД
     question = db.query(Question).filter(Question.id == question_id).first()
@@ -204,11 +210,21 @@ async def process_finish_question(callback: types.CallbackQuery, db: Session):
     question.is_active = False  # Требуется добавить это поле в модель
     db.commit()
 
+    await send_results_for_question(question, db, bot)
+
     await callback.message.answer(
         f"✅ Прием ответов на вопрос {question.order} завершен",
         reply_markup=None
     )
-
+    question_details_message: types.Message = data.get("question_details_message")
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=callback.from_user.id,
+            message_id=question_details_message.message_id,
+            reply_markup=None
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при удалении клавиатуры для {callback.from_user.id}: {e}")
 
 
 @admin_router.callback_query(lambda c: c.data == "create_poll")
