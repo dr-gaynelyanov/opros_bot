@@ -24,6 +24,18 @@ def get_admin_start_inline_keyboard() -> InlineKeyboardMarkup:
     )
     return keyboard
 
+def get_add_questions_keyboard(poll_id: int) -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру с кнопкой "Добавить вопросы"
+    """
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="➕ Добавить вопросы", callback_data=f"add_questions_{poll_id}")
+        ]]
+    )
+    return keyboard
+
+
 def get_admin_start_keyboard() -> ReplyKeyboardMarkup:
     """
     Создает клавиатуру для админов при команде /start (устаревшая)

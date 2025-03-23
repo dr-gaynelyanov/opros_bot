@@ -59,6 +59,9 @@ def remove_admin(db, telegram_id: int) -> Optional[User]:
     db.refresh(user)
     return user
 
+from database.models import Poll
+import secrets
+
 def is_admin(db, telegram_id: int) -> bool:
     user = get_user_by_telegram_id(db, telegram_id)
     return user.is_admin if user else False
@@ -69,3 +72,18 @@ def get_admin_count(db: Session) -> int:
     """
     return db.query(User).filter(User.is_admin == True).count()
 
+def create_poll_db(db: Session, title: str, description: str, created_by: int):
+    """
+    Создает новый опрос в базе данных.
+    """
+    access_code = secrets.token_urlsafe(16)  # Generate a unique access code
+    db_poll = Poll(
+        title=title,
+        description=description,
+        created_by=created_by,
+        access_code=access_code
+    )
+    db.add(db_poll)
+    db.commit()
+    db.refresh(db_poll)
+    return db_poll

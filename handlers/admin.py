@@ -1,11 +1,12 @@
-from keyboards.reply import get_admin_start_inline_keyboard
+from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
-from database.database import get_db, get_user_by_telegram_id, is_admin, add_admin, remove_admin, get_admin_count, get_admins
+from database.database import get_db, get_user_by_telegram_id, is_admin, add_admin, remove_admin, get_admin_count, get_admins, create_poll_db
 from sqlalchemy.orm import Session
 from states.admin_states import AdminStates
+from states.poll_states import CreatePollStates
 
 admin_router = Router()
 
@@ -61,7 +62,31 @@ async def admin_command(message: types.Message, db: Session):
 
 @admin_router.callback_query(lambda c: c.data == "create_poll")
 async def process_create_poll(callback: types.CallbackQuery, state: FSMContext, db: Session):
-    await callback.message.answer("Функция создания опроса пока не реализована.")
+    await state.set_state(CreatePollStates.waiting_for_poll_title)
+    await callback.message.edit_text("Пожалуйста, введите название опроса:")
+
+@admin_router.message(CreatePollStates.waiting_for_poll_title)
+async def process_poll_title(message: types.Message, state: FSMContext):
+    await state.update_data(poll_title=message.text)
+    await state.set_state(CreatePollStates.waiting_for_poll_description)
+    await message.answer("Теперь, пожалуйста, введите описание опроса:")
+
+@admin_router.message(CreatePollStates.waiting_for_poll_description)
+async def process_poll_description(message: types.Message, state: FSMContext, db: Session):
+    data = await state.get_data()
+    poll_title = data.get('poll_title')
+    poll_description = message.text
+    user_id = message.from_user.id
+
+    poll = create_poll_db(db, title=poll_title, description=poll_description, created_by=user_id)
+    
+    await state.update_data(poll_description=poll_description, poll_id=poll.id)
+    await state.set_state(CreatePollStates.poll_created)
+    await message.answer(
+        f"Опрос '{poll_title}' успешно создан!\n\n"
+        "Теперь вы можете добавить вопросы к опросу.",
+        reply_markup=get_add_questions_keyboard(poll.id) # TODO: Create keyboard
+    )
 
 @admin_router.callback_query(lambda c: c.data == "add_admin")
 async def process_add_admin(callback: types.CallbackQuery, state: FSMContext, db: Session):
