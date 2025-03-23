@@ -1,10 +1,10 @@
 from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboard
+from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboard, get_user_start_keyboard
 from states.user_states import UserRegistration
-from database.database import get_db, create_user, get_user_by_telegram_id, is_admin
+from database.database import get_db, create_user, get_user_by_telegram_id, is_admin, get_poll_by_access_code
 import logging
 import re
 from sqlalchemy.orm import Session
@@ -24,11 +24,11 @@ async def cmd_start(message: Message, state: FSMContext, db: Session):
 
     if user:
         await message.answer(
-            f"С возвращением, {user.first_name}! 👋\n"
-            "Вы уже зарегистрированы в системе."
+            f"С возвращением, {user.first_name}! 👋\n",
+            reply_markup=get_user_start_keyboard()
         )
         return
-    
+
     await state.set_state(UserRegistration.waiting_for_contact)
     await message.answer(
         "👋 Привет! Я бот для проведения онлайн опросов.\n\n"
@@ -36,6 +36,23 @@ async def cmd_start(message: Message, state: FSMContext, db: Session):
         "нажав на кнопку ниже.",
         reply_markup=get_contact_keyboard()
     )
+
+@common_router.callback_query(lambda c: c.data == "join_poll")
+async def process_join_poll(callback: CallbackQuery, state: FSMContext, db: Session):
+    await state.set_state(UserRegistration.waiting_for_access_code)
+    await callback.message.edit_text("Пожалуйста, введите код доступа к опросу:")
+
+@common_router.message(UserRegistration.waiting_for_access_code)
+async def process_access_code(message: Message, state: FSMContext, db: Session):
+    access_code = message.text.strip()
+    poll = get_poll_by_access_code(db, access_code)
+
+    if poll:
+        await message.answer(f"✅ Вы успешно присоединились к опросу '{poll.title}'!")
+        # TODO: Add user to the poll participants list, start the poll, etc.
+        await state.clear()
+    else:
+        await message.answer("❌ Опрос с таким кодом доступа не найден. Пожалуйста, проверьте код и попробуйте снова.")
 
 @common_router.message(Command("help"))
 async def cmd_help(message: Message):

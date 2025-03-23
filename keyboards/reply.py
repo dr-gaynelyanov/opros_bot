@@ -13,6 +13,17 @@ def get_contact_keyboard() -> ReplyKeyboardMarkup:
     )
     return keyboard
 
+def get_user_start_keyboard() -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру для обычных пользователей при команде /start
+    """
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="🔑 Присоединиться к опросу", callback_data="join_poll")
+        ]]
+    )
+    return keyboard
+
 def get_admin_start_inline_keyboard() -> InlineKeyboardMarkup:
     """
     Создает инлайн-клавиатуру для админов при команде /start

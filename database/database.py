@@ -109,3 +109,9 @@ def get_polls_by_creator(db: Session, creator_id: int) -> List[Poll]:
     Возвращает список опросов, созданных пользователем с указанным ID.
     """
     return db.query(Poll).filter(Poll.created_by == creator_id).all()
+
+def get_poll_by_access_code(db: Session, access_code: str) -> Optional[Poll]:
+    """
+    Возвращает опрос по коду доступа.
+    """
+    return db.query(Poll).filter(Poll.access_code == access_code).first()
