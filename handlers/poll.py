@@ -90,8 +90,6 @@ async def process_save_answer(callback: types.CallbackQuery, state: FSMContext, 
     state_data = await state.get_data()
     selected_options = state_data.get(f"selected_options:{poll_id}:{question_id}", []) or []
 
-    # При сохранении ответа нельзя отправлять правильный он или нет, просто пишем что ответ сохранен
-
     create_question_response(db, poll_id, user_id, question_id, selected_options)
 
     # Remove keyboard
