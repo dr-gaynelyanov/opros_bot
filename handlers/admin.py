@@ -1,12 +1,17 @@
+from database.models import Poll
 from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
-from database.database import get_db, get_user_by_telegram_id, is_admin, add_admin, remove_admin, get_admin_count, get_admins, create_poll_db
+from database.database import get_db, get_user_by_telegram_id, is_admin, add_admin, remove_admin, get_admin_count, \
+    get_admins, create_poll_db, create_question, get_polls_by_creator
 from sqlalchemy.orm import Session
 from states.admin_states import AdminStates
 from states.poll_states import CreatePollStates
+from utils.poll_parser import parse_poll_from_file
+import logging
+from keyboards.reply import get_polls_keyboard
 
 admin_router = Router()
 
@@ -60,6 +65,32 @@ async def admin_command(message: types.Message, db: Session):
         reply_markup=get_admin_start_inline_keyboard()
     )
 
+@admin_router.callback_query(lambda c: c.data == "start_poll")
+async def process_start_poll(callback: types.CallbackQuery, state: FSMContext, db: Session):
+    user_id = callback.from_user.id
+    polls = get_polls_by_creator(db, user_id)
+
+    if not polls:
+        await callback.message.edit_text("У вас пока нет созданных опросов.")
+        return
+
+    await callback.message.edit_text(
+        "Выберите опрос для запуска:",
+        reply_markup=get_polls_keyboard(polls)
+    )
+
+@admin_router.callback_query(F.data.startswith("select_poll_"))
+async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, db: Session):
+    poll_id = int(callback.data.split("_")[-1])
+    poll = db.query(Poll).filter(Poll.id == poll_id).first() # Assuming you have a Poll model
+
+    if not poll:
+        await callback.message.edit_text("❌ Опрос не найден.")
+        return
+    
+    await callback.message.edit_text(f"Код доступа к опросу '{poll.title}':\n\n`{poll.access_code}`", parse_mode="Markdown")
+
+
 @admin_router.callback_query(lambda c: c.data == "create_poll")
 async def process_create_poll(callback: types.CallbackQuery, state: FSMContext, db: Session):
     await state.set_state(CreatePollStates.waiting_for_poll_title)
@@ -85,8 +116,76 @@ async def process_poll_description(message: types.Message, state: FSMContext, db
     await message.answer(
         f"Опрос '{poll_title}' успешно создан!\n\n"
         "Теперь вы можете добавить вопросы к опросу.",
-        reply_markup=get_add_questions_keyboard(poll.id) # TODO: Create keyboard
+        reply_markup=get_add_questions_keyboard(poll.id)
     )
+
+@admin_router.callback_query(F.data.startswith("add_questions_"))
+async def process_add_questions(callback: types.CallbackQuery, state: FSMContext, db: Session):
+    poll_id = int(callback.data.split("_")[-1])
+    await state.update_data(poll_id=poll_id)
+    await state.set_state(CreatePollStates.waiting_for_questions_file)
+    await callback.message.edit_text(
+        "Пожалуйста, отправьте текстовый файл с вопросами для опроса.\n\n"
+        "**Формат файла:**\n"
+        "Каждый вопрос должен начинаться с номера, за которым следует точка и пробел. "
+        "Варианты ответов должны начинаться с `+ ` (для правильных ответов) или `- ` (для неправильных ответов). "
+        "Вопросы должны быть разделены пустыми строками.\n\n"
+        "**Пример:**\n"
+        "```\n"
+        "1. Столица России?\n"
+        "+ Москва\n"
+        "- Санкт-Петербург\n"
+        "- Казань\n"
+        "\n"
+        "2. Какая река самая длинная в мире?\n"
+        "- Нил\n"
+        "+ Амазонка\n"
+        "- Янцзы\n"
+        "```",
+        parse_mode="Markdown"
+    )
+
+@admin_router.message(CreatePollStates.waiting_for_questions_file, F.document)
+async def process_questions_file(message: types.Message, state: FSMContext, db: Session):
+    data = await state.get_data()
+    poll_id = data.get('poll_id')
+
+    if not poll_id:
+        await message.answer("❌ Ошибка: ID опроса не найден. Пожалуйста, создайте опрос заново.")
+        await state.clear()
+        return
+
+    document = message.document
+    file_id = document.file_id
+    file = await message.bot.get_file(file_id)
+    file_path = file.file_path
+
+    try:
+        downloaded_file = await message.bot.download_file(file_path)
+        file_content = downloaded_file.read().decode('utf-8')
+        questions = parse_poll_from_file(file_content)
+
+        if not questions:
+            await message.answer(
+                "❌ Ошибка: В файле не найдены вопросы в правильном формате. "
+                "Пожалуйста, проверьте формат файла и отправьте его снова."
+            )
+            return
+
+        for question_data in questions:
+            create_question(db, poll_id, question_data['text'], question_data['options'], question_data['correct_answers'], question_data['order'])
+
+        await message.answer(f"✅ Вопросы успешно добавлены к опросу!", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+
+    except Exception as e:
+        logging.error(f"Ошибка при обработке файла с вопросами: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при обработке файла с вопросами. "
+            "Пожалуйста, попробуйте снова.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await state.clear()
 
 @admin_router.callback_query(lambda c: c.data == "add_admin")
 async def process_add_admin(callback: types.CallbackQuery, state: FSMContext, db: Session):

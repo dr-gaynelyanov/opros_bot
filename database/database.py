@@ -87,3 +87,25 @@ def create_poll_db(db: Session, title: str, description: str, created_by: int):
     db.commit()
     db.refresh(db_poll)
     return db_poll
+
+def create_question(db: Session, poll_id: int, text: str, options: list, correct_answers: list, order: int):
+    """
+    Создает новый вопрос в базе данных и связывает его с опросом.
+    """
+    db_question = Question(
+        poll_id=poll_id,
+        text=text,
+        options=options,
+        correct_answers=correct_answers,
+        order=order
+    )
+    db.add(db_question)
+    db.commit()
+    db.refresh(db_question)
+    return db_question
+
+def get_polls_by_creator(db: Session, creator_id: int) -> List[Poll]:
+    """
+    Возвращает список опросов, созданных пользователем с указанным ID.
+    """
+    return db.query(Poll).filter(Poll.created_by == creator_id).all()
