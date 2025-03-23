@@ -2,9 +2,9 @@ from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from keyboards.reply import get_contact_keyboard
+from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboard
 from states.user_states import UserRegistration
-from database.database import get_db, create_user, get_user_by_telegram_id
+from database.database import get_db, create_user, get_user_by_telegram_id, is_admin
 import logging
 import re
 from sqlalchemy.orm import Session
@@ -15,6 +15,13 @@ common_router = Router()
 async def cmd_start(message: Message, state: FSMContext, db: Session):
     user = get_user_by_telegram_id(db, message.from_user.id)
     
+    if is_admin(db, message.from_user.id):
+        await message.answer(
+            f"Добро пожаловать, администратор {user.first_name}! 👋\n",
+            reply_markup=get_admin_start_inline_keyboard()
+        )
+        return
+
     if user:
         await message.answer(
             f"С возвращением, {user.first_name}! 👋\n"

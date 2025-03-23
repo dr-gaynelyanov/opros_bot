@@ -1,3 +1,4 @@
+from keyboards.reply import get_admin_start_inline_keyboard
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -7,18 +8,6 @@ from sqlalchemy.orm import Session
 from states.admin_states import AdminStates
 
 admin_router = Router()
-
-def get_admin_keyboard() -> InlineKeyboardMarkup:
-    keyboard = [
-        [
-            InlineKeyboardButton(text="➕ Добавить админа", callback_data="add_admin"),
-            InlineKeyboardButton(text="❌ Удалить админа", callback_data="remove_admin")
-        ],
-        [
-            InlineKeyboardButton(text="📋 Список админов", callback_data="list_admins")
-        ]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def get_confirm_keyboard(action: str) -> InlineKeyboardMarkup:
     keyboard = [
@@ -59,15 +48,20 @@ async def process_user_id_input(message: types.Message, state: FSMContext, db: S
     return True
 
 @admin_router.message(Command("admin"))
+
 async def admin_command(message: types.Message, db: Session):
     if not is_admin(db, message.from_user.id):
         await message.answer("У вас нет доступа к этой команде.")
         return
     
     await message.answer(
-        "Панель управления администраторами",
-        reply_markup=get_admin_keyboard()
+        "Панель управления администратора",
+        reply_markup=get_admin_start_inline_keyboard()
     )
+
+@admin_router.callback_query(lambda c: c.data == "create_poll")
+async def process_create_poll(callback: types.CallbackQuery, state: FSMContext, db: Session):
+    await callback.message.answer("Функция создания опроса пока не реализована.")
 
 @admin_router.callback_query(lambda c: c.data == "add_admin")
 async def process_add_admin(callback: types.CallbackQuery, state: FSMContext, db: Session):
@@ -199,4 +193,4 @@ async def process_list_admins(callback: types.CallbackQuery, db: Session):
             f"-------------------\n"
         )
     
-    await callback.message.edit_text(admin_list_str) 
+    await callback.message.edit_text(admin_list_str)
