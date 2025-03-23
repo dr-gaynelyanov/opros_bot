@@ -5,6 +5,8 @@ from aiogram.fsm.context import FSMContext
 from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboard, get_user_start_keyboard
 from states.user_states import UserRegistration
 from database.database import get_db, create_user, get_user_by_telegram_id, is_admin, get_poll_by_access_code, create_poll_response
+from database.models import Poll, Question
+from handlers.poll import send_question
 import logging
 import re
 from sqlalchemy.orm import Session

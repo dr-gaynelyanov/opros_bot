@@ -1,17 +1,19 @@
 from database.models import Poll
 from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard
-from aiogram import Router, types, F
+from aiogram import Router, types, F, Bot
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from database.database import get_db, get_user_by_telegram_id, is_admin, add_admin, remove_admin, get_admin_count, \
-    get_admins, create_poll_db, create_question, get_polls_by_creator
+    get_admins, create_poll_db, create_question, get_polls_by_creator, get_users_by_poll_id
 from sqlalchemy.orm import Session
 from states.admin_states import AdminStates
 from states.poll_states import CreatePollStates
 from utils.poll_parser import parse_poll_from_file
 import logging
 from keyboards.reply import get_polls_keyboard, get_send_first_question_keyboard
+from handlers.poll import send_question
+from database.models import Question
 
 admin_router = Router()
 
@@ -80,9 +82,9 @@ async def process_start_poll(callback: types.CallbackQuery, state: FSMContext, d
     )
 
 @admin_router.callback_query(F.data.startswith("select_poll_"))
-async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, db: Session):
+async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, db: Session, bot: Bot):
     poll_id = int(callback.data.split("_")[-1])
-    poll = db.query(Poll).filter(Poll.id == poll_id).first() # Assuming you have a Poll model
+    poll = db.query(Poll).filter(Poll.id == poll_id).first()
 
     if not poll:
         await callback.message.edit_text("❌ Опрос не найден.")
@@ -93,6 +95,41 @@ async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, 
         parse_mode="Markdown",
         reply_markup=get_send_first_question_keyboard(poll.id)
     )
+
+@admin_router.callback_query(F.data.startswith("send_first_question_"))
+async def process_send_first_question(callback: types.CallbackQuery, bot: Bot, db: Session):
+    poll_id = int(callback.data.split("_")[-1])
+
+    # Get the first question for the poll
+    question = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).first()
+
+    if not question:
+        await callback.message.answer("❌ В этом опросе пока нет вопросов.")
+        return
+
+    # Get the poll object
+    poll = db.query(Poll).filter(Poll.id == poll_id).first()
+    if not poll:
+        await callback.message.answer("❌ Опрос не найден.")
+        return
+
+    # Get list of users who joined the poll (PollResponse)
+    user_ids = get_users_by_poll_id(db, poll_id)
+
+    if not user_ids:
+        await callback.message.answer("❌ К этому опросу еще никто не присоединился.")
+        return
+
+    answer_options = question.options
+    question_text = question.text
+
+    for user_id in user_ids:
+        try:
+            await send_question(user_id, question_text, answer_options, poll_id, question.id, bot)
+        except Exception as e:
+            logging.error(f"Не удалось отправить вопрос пользователю {user_id}: {e}")
+
+    await callback.message.answer(f"Первый вопрос отправлен {len(user_ids)} пользователям!")
 
 
 @admin_router.callback_query(lambda c: c.data == "create_poll")

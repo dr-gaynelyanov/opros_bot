@@ -128,3 +128,19 @@ def create_poll_response(db: Session, poll_id: int, user_id: int):
     db.commit()
     db.refresh(db_poll_response)
     return db_poll_response
+
+def get_answer_options(db: Session, question_id: int) -> List[str]:
+    """
+    Возвращает список вариантов ответов для вопроса.
+    """
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if question:
+        return question.options
+    else:
+        return []
+
+def get_users_by_poll_id(db: Session, poll_id: int) -> List[int]:
+    """
+    Возвращает список ID пользователей, присоединившихся к опросу.
+    """
+    return [response.user_id for response in db.query(PollResponse).filter(PollResponse.poll_id == poll_id).all()]

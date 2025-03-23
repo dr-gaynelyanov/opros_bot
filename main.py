@@ -18,11 +18,13 @@ dp = Dispatcher(storage=storage)
 
 from handlers.common import common_router
 from handlers.admin import admin_router
+from handlers.poll import poll_router
 
 dp.update.middleware(DatabaseMiddleware())
 
 dp.include_router(common_router)
 dp.include_router(admin_router)
+dp.include_router(poll_router)
 
 async def main():
     await dp.start_polling(bot)
