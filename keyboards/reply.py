@@ -51,6 +51,24 @@ def get_admin_start_inline_keyboard() -> InlineKeyboardMarkup:
     )
     return keyboard
 
+def get_admin_control_keyboard() -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру для управления администраторами
+    """
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Добавить администратора", callback_data="add_admin"),
+                InlineKeyboardButton(text="➖ Удалить администратора", callback_data="remove_admin"),
+            ],
+            [
+                InlineKeyboardButton(text="📋 Список администраторов", callback_data="list_admins"),
+            ]
+        ]
+    )
+    return keyboard
+
+
 def get_polls_keyboard(polls: list) -> InlineKeyboardMarkup:
     """
     Создает инлайн-клавиатуру со списком опросов
@@ -98,5 +116,3 @@ def get_admin_question_control_keyboard(poll_id: int, question_id: int) -> Inlin
         ]
     ])
     return keyboard
-
-

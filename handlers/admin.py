@@ -1,6 +1,6 @@
 from database.models import Poll, PollResponse, QuestionResponse
 from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard, \
-    get_admin_question_control_keyboard
+    get_admin_question_control_keyboard, get_admin_control_keyboard
 from aiogram import Router, types, F, Bot
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
@@ -17,6 +17,7 @@ from handlers.poll import send_question, send_results_for_question
 from database.models import Question
 from utils.report_generator import generate_excel_report
 from aiogram.types import BufferedInputFile
+from aiogram.exceptions import TelegramForbiddenError
 
 admin_router = Router()
 
@@ -69,8 +70,29 @@ async def admin_command(message: types.Message, db: Session):
 
     await message.answer(
         "Панель управления администратора",
-        reply_markup=get_admin_start_inline_keyboard()
+        reply_markup=get_admin_control_keyboard()
     )
+
+
+@admin_router.message(Command("initialize_admin"))
+async def initialize_admin_command(message: types.Message, db: Session):
+    """
+    Назначает текущего пользователя администратором, если нет других админов в базе данных.
+    """
+    admin_count = get_admin_count(db)
+    if admin_count == 0:
+        user = add_admin(db, message.from_user.id)
+        if user:
+            await message.answer(
+                f"✅ Вы успешно инициализированы как администратор.\n"
+                f"ID: {user.telegram_id}\n"
+                f"Имя: {user.first_name} {user.last_name or ''}\n"
+                f"Username: @{user.username or 'не указан'}"
+            )
+        else:
+            await message.answer("❌ Произошла ошибка при инициализации администратора.")
+    else:
+        await message.answer("❌ Инициализация администратора не требуется. Администраторы уже существуют.")
 
 
 @admin_router.callback_query(lambda c: c.data == "start_poll")
@@ -240,14 +262,11 @@ async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Ses
     questions_list = data.get('questions_list', [])
     current_index = data.get('current_question_index', 0)
 
-    #Добавить обновление состояния
     if current_index >= len(questions_list):
         # Calculate total score
         poll_id = int(callback.data.split("_")[2])
         questions = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).all()
         user_ids = get_users_by_poll_id(db, poll_id)
-        total_correct_answers = 0
-        total_questions_answered = 0
 
         await callback.message.answer(text="Опрос завершен, можете посмотреть отчет")
 
