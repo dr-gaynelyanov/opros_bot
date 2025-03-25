@@ -15,6 +15,8 @@ import logging
 from keyboards.reply import get_polls_keyboard, get_send_first_question_keyboard
 from handlers.poll import send_question, send_results_for_question
 from database.models import Question
+from utils.report_generator import generate_excel_report
+from aiogram.types import BufferedInputFile
 
 admin_router = Router()
 
@@ -238,22 +240,14 @@ async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Ses
     questions_list = data.get('questions_list', [])
     current_index = data.get('current_question_index', 0)
 
-    from utils.report_generator import generate_excel_report
-    from aiogram.types import BufferedInputFile
-
     #Добавить обновление состояния
     if current_index >= len(questions_list):
         # Calculate total score
         poll_id = int(callback.data.split("_")[2])
+        questions = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).all()
         user_ids = get_users_by_poll_id(db, poll_id)
         total_correct_answers = 0
         total_questions_answered = 0
-
-        # for user_id in user_ids:
-        #     poll_response = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
-        #     if poll_response:
-        #         total_correct_answers += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
-        #         total_questions_answered += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id).count()
 
         await callback.message.answer(text="Опрос завершен, можете посмотреть отчет")
 
@@ -261,6 +255,13 @@ async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Ses
         excel_file = generate_excel_report(db, poll_id)
         file = BufferedInputFile(excel_file.read(), filename=f"poll_{poll_id}_results.xlsx")
         await bot.send_document(callback.from_user.id, document=file)
+
+        # Send results to each user
+        for user_id in user_ids:
+            poll_response = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
+            if poll_response:
+                correct_answers = db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
+                await bot.send_message(user_id, f"Опрос завершен! Вы набрали {correct_answers} баллов из {len(questions)} вопросов.")
 
         return
 
