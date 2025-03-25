@@ -90,7 +90,7 @@ async def initialize_admin_command(message: types.Message, db: Session):
                 f"Username: @{user.username or 'не указан'}"
             )
         else:
-            await message.answer("❌ Произошла ошибка при инициализации администратора.")
+            await message.answer("❌ Произошла ошибка при инициализации администратора. Возможно, вам следует сначала зарегистрироваться через /start")
     else:
         await message.answer("❌ Инициализация администратора не требуется. Администраторы уже существуют.")
 
