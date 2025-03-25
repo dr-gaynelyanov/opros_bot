@@ -39,8 +39,14 @@ def create_answer_keyboard(answer_options: list, poll_id: int, question_id: int,
             text = option
         keyboard.append([InlineKeyboardButton(text=text,
                                               callback_data=f"answer:{poll_id}:{question_id}:{option.replace(':', '__COLON__')}")])
+    save_button_text = "💾 Сохранить ответ"
+    save_button_callback_data = f"save_answer:{poll_id}:{question_id}"
+    if not selected_options:
+        save_button_text = "💾 Выберите ответ"
+        save_button_callback_data = "no_answer"
+
     keyboard.append(
-        [InlineKeyboardButton(text="💾 Сохранить ответ", callback_data=f"save_answer:{poll_id}:{question_id}")])
+        [InlineKeyboardButton(text=save_button_text, callback_data=save_button_callback_data)])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
