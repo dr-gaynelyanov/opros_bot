@@ -1,9 +1,6 @@
 # Виртуальное окружение
 venv/
 
-# Документация
-docs/
-
 # Переменные окружения
 .env
 
@@ -17,3 +14,4 @@ __pycache__/
 .vscode/ 
 opros_bot.db
 py_to_txt.py
+docs/development_plan.md
