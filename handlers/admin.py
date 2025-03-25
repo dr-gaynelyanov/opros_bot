@@ -1,4 +1,4 @@
-from database.models import Poll
+from database.models import Poll, PollResponse, QuestionResponse
 from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard, \
     get_admin_question_control_keyboard
 from aiogram import Router, types, F, Bot
@@ -211,10 +211,14 @@ async def process_finish_question(callback: types.CallbackQuery, db: Session, bo
     db.commit()
 
     await send_results_for_question(question, db, bot)
+    #Перенести в модуль keyboard/reply
+    next_question_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➡️ Перейти к следующему вопросу", callback_data=f"next_question_{poll_id}")]
+    ])
 
     await callback.message.answer(
         f"✅ Прием ответов на вопрос {question.order} завершен",
-        reply_markup=None
+        reply_markup=next_question_keyboard
     )
     question_details_message: types.Message = data.get("question_details_message")
     try:
@@ -225,6 +229,40 @@ async def process_finish_question(callback: types.CallbackQuery, db: Session, bo
         )
     except Exception as e:
         logging.error(f"Ошибка при удалении клавиатуры для {callback.from_user.id}: {e}")
+
+
+@admin_router.callback_query(F.data.startswith("next_question_"))
+async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Session, state: FSMContext):
+    data = await state.get_data()
+    poll_id = int(callback.data.split("_")[2])
+    questions_list = data.get('questions_list', [])
+    current_index = data.get('current_question_index', 0)
+
+    from utils.report_generator import generate_excel_report
+    from aiogram.types import BufferedInputFile
+
+    #Добавить обновление состояния
+    if current_index >= len(questions_list):
+        # Calculate total score
+        poll_id = int(callback.data.split("_")[2])
+        user_ids = get_users_by_poll_id(db, poll_id)
+        total_correct_answers = 0
+        total_questions_answered = 0
+
+        for user_id in user_ids:
+            poll_response = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
+            if poll_response:
+                total_correct_answers += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
+                total_questions_answered += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id).count()
+
+        # Generate Excel report
+        excel_file = generate_excel_report(db, poll_id)
+        file = BufferedInputFile(excel_file.read(), filename=f"poll_{poll_id}_results.xlsx")
+        await bot.send_document(callback.from_user.id, document=file)
+
+        return
+
+    await send_next_question(callback, bot, db, state)
 
 
 @admin_router.callback_query(lambda c: c.data == "create_poll")
