@@ -77,7 +77,7 @@ Telegram-бот для проведения опросов.
 3.  Активируйте виртуальное окружение: `source venv/bin/activate` (Linux/macOS) или `venv\Scripts\activate` (Windows)
 4.  Установите зависимости: `pip install -r requirements.txt`
 5.  Создайте файл `.env` и добавьте в него токен бота: `BOT_TOKEN=<your_bot_token>`
-6.  Запустите бота: `python main.py`
+6.  Запустите бота: `python main.py` (при первом запуске будет создана база данных)
 
 ## Добавление новых функций
 
