@@ -92,7 +92,7 @@ def get_admin_question_control_keyboard(poll_id: int, question_id: int) -> Inlin
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
-                text="⏹ Завершить прием ответов",
+                text="⏹ Завершить прием ответов на вопрос",
                 callback_data=f"finish_question_{poll_id}_{question_id}"
             )
         ]
