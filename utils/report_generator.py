@@ -1,7 +1,7 @@
 import openpyxl
 from openpyxl.styles import Font
-from database.database import get_users_by_poll_id, create_question_response
-from database.models import Question, QuestionResponse, PollResponse, User
+from database.database import get_users_by_poll_id
+from database.models import Question, QuestionResponse, PollResponse, User, Poll
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
@@ -21,12 +21,41 @@ def generate_excel_report(db: Session, poll_id: int) -> BytesIO:
     """
     # Create a new workbook
     workbook = openpyxl.Workbook()
-    sheet = workbook.active
-    sheet.title = "Poll Results"
+
+    # Create a new sheet for poll description
+    description_sheet = workbook.create_sheet("Poll Description", 0)
+
+    # Get poll data
+    poll: Optional[Poll] = db.query(Poll).filter(Poll.id == poll_id).first()
+    if not poll:
+        logging.warning(f"Poll with id {poll_id} not found")
+        return BytesIO()
+
+    # Write poll data to the sheet
+    description_sheet["A1"] = "Название опроса"
+    description_sheet["B1"] = poll.title
+    description_sheet["A2"] = "Описание"
+    description_sheet["B2"] = poll.description
+    description_sheet["A3"] = "Количество вопросов"
+    questions = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).all()
+    description_sheet["B3"] = len(questions)
+
+    row_num = 4
+    for question in questions:
+        description_sheet[f"A{row_num}"] = f"Вопрос {question.order}"
+        description_sheet[f"B{row_num}"] = question.text
+        row_num += 1
+        description_sheet[f"A{row_num}"] = "Варианты ответов"
+        description_sheet[f"B{row_num}"] = ", ".join(question.options)
+        row_num += 1
+        description_sheet[f"A{row_num}"] = "Правильные ответы"
+        description_sheet[f"B{row_num}"] = ", ".join(question.correct_answers)
+        row_num += 2
+
+    sheet = workbook.create_sheet("Poll Results")
 
     # Define headers
     headers = ["User ID", "Username", "Итоговый балл"]
-    questions = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).all()
     for question in questions:
         headers.append(f"Ответ {question.order}")
         headers.append(f"Правильный ответ {question.order}")
@@ -49,20 +78,24 @@ def generate_excel_report(db: Session, poll_id: int) -> BytesIO:
             continue
 
         # Get user's poll response
-        poll_response: Optional[PollResponse] = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
+        poll_response: Optional[PollResponse] = db.query(PollResponse).filter(PollResponse.poll_id == poll_id,
+                                                                               PollResponse.user_id == user_id).first()
         if not poll_response:
             logging.warning(f"PollResponse not found for user {user_id} and poll {poll_id}")
             continue
 
         # Calculate total score
-        total_correct_answers = db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
+        total_correct_answers = db.query(QuestionResponse).filter(
+            QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
         total_questions = len(questions)
 
         user_data = [user_id, user.username, total_correct_answers]
 
         # Get user's question responses
         for question in questions:
-            question_response: Optional[QuestionResponse] = db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.question_id == question.id).first()
+            question_response: Optional[QuestionResponse] = db.query(QuestionResponse).filter(
+                QuestionResponse.poll_response_id == poll_response.id,
+                QuestionResponse.question_id == question.id).first()
             if question_response:
                 user_data.append(", ".join(question_response.selected_answers))
                 user_data.append(", ".join(question.correct_answers))

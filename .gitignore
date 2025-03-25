@@ -16,3 +16,4 @@ __pycache__/
 .idea/
 .vscode/ 
 opros_bot.db
+py_to_txt.py

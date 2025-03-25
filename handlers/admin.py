@@ -249,11 +249,13 @@ async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Ses
         total_correct_answers = 0
         total_questions_answered = 0
 
-        for user_id in user_ids:
-            poll_response = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
-            if poll_response:
-                total_correct_answers += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
-                total_questions_answered += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id).count()
+        # for user_id in user_ids:
+        #     poll_response = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
+        #     if poll_response:
+        #         total_correct_answers += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
+        #         total_questions_answered += db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id).count()
+
+        await callback.message.answer(text="Опрос завершен, можете посмотреть отчет")
 
         # Generate Excel report
         excel_file = generate_excel_report(db, poll_id)
