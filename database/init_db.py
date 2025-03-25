@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine
-from models import Base
+from database.models import Base
 
 DATABASE_URL = "sqlite:///opros_bot.db"
 
