@@ -13,6 +13,21 @@ def get_contact_keyboard() -> ReplyKeyboardMarkup:
     )
     return keyboard
 
+
+def get_registration_type_keyboard() -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру с выбором типа регистрации: контакт или email
+    """
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📱 Поделиться контактом", callback_data="contact_registration"),
+                InlineKeyboardButton(text="✉️ Ввести email", callback_data="email_registration")
+            ]
+        ]
+    )
+    return keyboard
+
 def get_send_first_question_keyboard(poll_id: int) -> InlineKeyboardMarkup:
     """
     Создает инлайн-клавиатуру с кнопкой "Отправить первый вопрос"
