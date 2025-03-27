@@ -2,7 +2,8 @@ from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboard, get_user_start_keyboard
+from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboard, get_user_start_keyboard, \
+    get_registration_type_keyboard
 from states.user_states import UserRegistration
 from database.database import get_db, create_user, get_user_by_telegram_id, is_admin, get_poll_by_access_code, create_poll_response
 from database.models import Poll, Question
@@ -31,13 +32,26 @@ async def cmd_start(message: Message, state: FSMContext, db: Session):
         )
         return
 
-    await state.set_state(UserRegistration.waiting_for_contact)
+    await state.set_state(UserRegistration.choosing_registration_type)
     await message.answer(
-        "👋 Привет! Я бот для проведения онлайн опросов.\n\n"
-        "Для регистрации, пожалуйста, поделитесь своим контактом, "
-        "нажав на кнопку ниже.",
-        reply_markup=get_contact_keyboard()
+        "Выберите метод регистрации:",
+        reply_markup=get_registration_type_keyboard()
     )
+
+    @common_router.callback_query(
+    F.data.in_(["contact_registration", "email_registration"]),
+    UserRegistration.choosing_registration_type
+    )
+    async def process_registration_type(callback: CallbackQuery, state: FSMContext):
+        if callback.data == "contact_registration":
+            await state.set_state(UserRegistration.waiting_for_contact)
+            await callback.message.answer(
+                "Пожалуйста, поделитесь своим контактом.",
+                reply_markup=get_contact_keyboard()
+            )
+        else:
+            await state.set_state(UserRegistration.waiting_for_email)
+            await callback.message.answer("Введите ваш email:")
 
 @common_router.callback_query(lambda c: c.data == "join_poll")
 async def process_join_poll(callback: CallbackQuery, state: FSMContext, db: Session):
@@ -84,82 +98,74 @@ async def handle_contact(message: Message, state: FSMContext):
     username = message.from_user.username
     contact = message.contact
 
-    logging.info(
-        f"Получен контакт от пользователя {username} (ID: {user_id}). "
-        f"Телефон: {contact.phone_number}"
-    )
-
-    if contact.user_id == user_id:
-        user_info = {
-            'user_id': user_id,
-            'username': username,
-            'phone': contact.phone_number,
-            'first_name': contact.first_name,
-            'last_name': contact.last_name if contact.last_name else None
-        }
-        
-        await state.update_data(user_info=user_info)
-        await state.set_state(UserRegistration.waiting_for_email)
-        
-        logging.info(f"Успешная регистрация контакта: {user_info}")
-        
+    if contact.user_id != user_id:
         await message.answer(
-            f"✅ Спасибо, {contact.first_name}!\n\n"
-            f"Ваш номер {contact.phone_number} успешно сохранен.\n"
-            "Теперь, пожалуйста, введите ваш email:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-    else:
-        logging.warning(
-            f"Пользователь {username} (ID: {user_id}) попытался отправить "
-            f"чужой контакт (ID: {contact.user_id})"
-        )
-        
-        await message.answer(
-            "❌ Пожалуйста, отправьте свой собственный контакт, используя кнопку ниже.",
+            "❌ Пожалуйста, отправьте свой собственный контакт.",
             reply_markup=get_contact_keyboard()
         )
-
-@common_router.message(UserRegistration.waiting_for_email)
-async def handle_email(message: Message, state: FSMContext):
-    email = message.text.strip()
-    
-    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-        await message.answer(
-            "❌ Неверный формат email. Пожалуйста, введите корректный email:"
-        )
         return
-    
-    data = await state.get_data()
-    user_info = data['user_info']
-    user_info['email'] = email
-    
+
+    user_info = {
+        'user_id': user_id,
+        'username': username,
+        'phone': contact.phone_number,
+        'first_name': contact.first_name,
+        'last_name': contact.last_name
+    }
+
     db = next(get_db())
     try:
-        db_user = create_user(
+        create_user(
             db=db,
             telegram_id=user_info['user_id'],
             username=user_info['username'],
             first_name=user_info['first_name'],
             last_name=user_info['last_name'],
             phone=user_info['phone'],
-            email=email
+            email=None  # Не требуем email
         )
-        logging.info(f"Пользователь успешно создан в базе данных: {db_user.id}")
     except Exception as e:
         logging.error(f"Ошибка при создании пользователя: {e}")
-        await message.answer(
-            "❌ Произошла ошибка при регистрации. Пожалуйста, попробуйте позже."
-        )
+        await message.answer("❌ Произошла ошибка при регистрации. Попробуйте позже.")
         return
-    
-    await state.set_state(UserRegistration.registration_complete)
 
+    await state.set_state(UserRegistration.registration_complete)
     await message.answer(
-        f"✅ Отлично! Регистрация завершена.\n\n"
-        f"Ваши данные:\n"
-        f"Имя: {user_info['first_name']}\n"
-        f"Телефон: {user_info['phone']}\n"
-        f"Email: {email}\n\n"
-        "Теперь вы можете участвовать в опросах!"
+        f"✅ Регистрация завершена!\n"
+        f"Ваш номер: {user_info['phone']}",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+@common_router.message(UserRegistration.waiting_for_email)
+async def handle_email(message: Message, state: FSMContext):
+    email = message.text.strip()
+    
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        await message.answer("❌ Неверный формат email. Попробуйте снова:")
+        return
+
+    user_id = message.from_user.id
+    username = message.from_user.username
+
+    db = next(get_db())
+    try:
+        create_user(
+            db=db,
+            telegram_id=user_id,
+            username=username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+            phone=None,  # Не требуем телефон
+            email=email
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при создании пользователя: {e}")
+        await message.answer("❌ Произошла ошибка при регистрации. Попробуйте позже.")
+        return
+
+    await state.set_state(UserRegistration.registration_complete)
+    await message.answer(
+        f"✅ Регистрация завершена!\n"
+        f"Ваш email: {email}",
+        reply_markup=ReplyKeyboardRemove()
     )
