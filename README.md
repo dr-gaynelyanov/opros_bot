@@ -76,6 +76,7 @@ Telegram-бот для проведения опросов.
 
 ## Развертывание и запуск
 
+0. Предоставьте разрешение на запуск скриптов: `Set-ExecutionPolicy RemoteSigned`
 1.  Клонируйте репозиторий.
 2.  Создайте виртуальное окружение: `python -m venv venv`
 3.  Активируйте виртуальное окружение: `source venv/bin/activate` (Linux/macOS) или `venv\Scripts\activate` (Windows)
