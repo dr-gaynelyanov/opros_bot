@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from sqlalchemy import func
+
 from database.models import Poll, PollResponse, QuestionResponse
 from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard, \
     get_admin_question_control_keyboard, get_admin_control_keyboard
@@ -8,7 +10,7 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from database.database import get_db, get_user_by_telegram_id, is_admin, add_admin, remove_admin, get_admin_count, \
-    get_admins, create_poll_db, create_question, get_polls_by_creator, get_users_by_poll_id
+    get_admins, create_poll_db, create_question, get_polls_by_creator, get_users_by_poll_id, create_question_response
 from sqlalchemy.orm import Session
 from states.admin_states import AdminStates
 from states.poll_states import CreatePollStates
@@ -16,7 +18,7 @@ from utils.message_exception_translator import translate_exception
 from utils.poll_parser import parse_poll_from_file
 import logging
 from keyboards.reply import get_polls_keyboard, get_send_first_question_keyboard
-from handlers.poll import send_question, send_results_for_question
+from handlers.poll import send_question, send_results_for_question, TEMP_ANSWERS
 from database.models import Question
 from utils.report_generator import generate_excel_report
 from aiogram.types import BufferedInputFile
@@ -258,6 +260,21 @@ async def process_finish_question(callback: types.CallbackQuery, db: Session, bo
     poll_id, question_id = map(int, callback.data.split("_")[2:])
     data = await state.get_data()
 
+    # Получаем всех пользователей опроса
+    user_ids = get_users_by_poll_id(db, poll_id)
+
+    for user_id in user_ids:
+        key = (user_id, poll_id, question_id)
+        selected_answers = TEMP_ANSWERS.get(key, [])
+        print(f"selected_answers: {selected_answers}")
+
+        # Создаем запись в БД
+        create_question_response(db, poll_id, user_id, question_id, selected_answers)
+
+        # Удаляем временные данные
+        if key in TEMP_ANSWERS:
+            del TEMP_ANSWERS[key]
+
     # Получаем вопрос из БД
     question = db.query(Question).filter(Question.id == question_id).first()
     if not question:
@@ -325,12 +342,20 @@ async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Ses
         for user_id in user_ids:
             poll_response = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
             if poll_response:
-                correct_answers = db.query(QuestionResponse).filter(QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
-                await bot.send_message(user_id, f"Опрос завершен! Вы набрали {correct_answers} баллов из {len(questions)} вопросов.")
+                total_score = db.query(func.sum(QuestionResponse.score)).filter(
+                    QuestionResponse.poll_response_id == poll_response.id
+                ).scalar() or 0.0
+
+                # Округляем до двух знаков после запятой
+                total_score = round(total_score, 2)
+
+                await bot.send_message(
+                    user_id,
+                    f"Опрос завершен! Вы набрали {total_score} баллов"
+                )
 
         return
 
-    #await send_next_question(callback, bot, db, state)
     await send_next_question(callback, bot, db, state)
 
 

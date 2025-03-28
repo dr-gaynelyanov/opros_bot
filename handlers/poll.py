@@ -6,9 +6,11 @@ from database.models import Poll, Question, QuestionResponse, PollResponse
 from sqlalchemy.orm import Session
 import logging
 from states.poll_states import PollPassing
+from typing import Dict, List, Tuple
 
 poll_router = Router()
 
+TEMP_ANSWERS: Dict[Tuple[int, int, int], List[str]] = {}
 
 async def send_question(student_id: int, question_text: str, answer_options: list, poll_id: int, question_id: int, bot):
     """
@@ -39,14 +41,6 @@ def create_answer_keyboard(answer_options: list, poll_id: int, question_id: int,
             text = option
         keyboard.append([InlineKeyboardButton(text=text,
                                               callback_data=f"answer:{poll_id}:{question_id}:{option.replace(':', '__COLON__')}")])
-    save_button_text = "💾 Сохранить ответ"
-    save_button_callback_data = f"save_answer:{poll_id}:{question_id}"
-    if not selected_options:
-        save_button_text = "💾 Выберите ответ"
-        save_button_callback_data = "no_answer"
-
-    keyboard.append(
-        [InlineKeyboardButton(text=save_button_text, callback_data=save_button_callback_data)])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -61,6 +55,12 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext, db: S
     selected_option = data[3].replace('__COLON__', ':')
     user_id = callback.from_user.id
 
+    key = (user_id, poll_id, question_id)
+
+    # Получаем текущие выбранные опции
+    current_options = TEMP_ANSWERS.get(key, [])
+    print(f"current_options: {current_options}")
+
     # Get selected options from state
     state_data = await state.get_data()
     selected_options = state_data.get(f"selected_options:{poll_id}:{question_id}", []) or []
@@ -70,6 +70,9 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext, db: S
         selected_options.remove(selected_option)
     else:
         selected_options.append(selected_option)
+
+    # Обновляем словарь
+    TEMP_ANSWERS[key] = selected_options
 
     # Update state
     await state.update_data({f"selected_options:{poll_id}:{question_id}": selected_options})
@@ -88,38 +91,6 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext, db: S
         logging.error(f"Не удалось отредактировать сообщение: {e}")
 
     await callback.answer()
-
-
-@poll_router.callback_query(F.data.startswith("save_answer:"))
-async def process_save_answer(callback: types.CallbackQuery, state: FSMContext, db: Session):
-    """
-    Обрабатывает сохранение ответа пользователя.
-    """
-    data = callback.data.split(":")
-    poll_id = int(data[1])
-    question_id = int(data[2])
-    user_id = callback.from_user.id
-
-    question = db.query(Question).filter(Question.id == question_id).first()
-    if not question or not question.is_active:
-        await callback.answer(f"Прием ответов на вопрос {question.order} завершен", show_alert=True)
-        return
-
-    # Get selected options from state
-    state_data = await state.get_data()
-    selected_options = state_data.get(f"selected_options:{poll_id}:{question_id}", []) or []
-
-    create_question_response(db, poll_id, user_id, question_id, selected_options)
-
-    # Remove keyboard
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception as e:
-        logging.error(f"Не удалось удалить клавиатуру: {e}")
-
-    # Send confirmation message
-    await callback.message.edit_text("✅ Ответ сохранен, ожидайте следующего вопроса.")
-    await state.clear()
 
 
 async def send_results_for_question(question: Question, db: Session, bot: Bot):
