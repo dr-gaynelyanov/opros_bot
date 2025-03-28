@@ -95,12 +95,13 @@ def get_polls_keyboard(polls: list) -> InlineKeyboardMarkup:
 
 def get_add_questions_keyboard(poll_id: int) -> InlineKeyboardMarkup:
     """
-    Создает инлайн-клавиатуру с кнопкой "Добавить вопросы"
+    Создает инлайн-клавиатуру с кнопками "Загрузить из файла" и "Ввести текстом" для добавления вопросов.
     """
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(text="➕ Добавить вопросы", callback_data=f"add_questions_{poll_id}")
-        ]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Загрузить из файла", callback_data=f"add_questions_file_{poll_id}")],
+            [InlineKeyboardButton(text="Ввести текстом", callback_data=f"add_questions_text_{poll_id}")]
+        ]
     )
     return keyboard
 

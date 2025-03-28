@@ -72,7 +72,37 @@ async def admin_command(message: types.Message, db: Session):
     await message.answer(
         "Панель управления администратора",
         reply_markup=get_admin_control_keyboard()
-    )
+        )
+
+
+@admin_router.message(CreatePollStates.waiting_for_questions_text, F.text)
+async def process_questions_text(message: types.Message, state: FSMContext, db: Session):
+    data = await state.get_data()
+    poll_id = data.get('poll_id')
+    if not poll_id:
+        await message.answer("❌ Ошибка: ID опроса не найден. Пожалуйста, создайте опрос заново.")
+        await state.clear()
+        return
+
+    file_content = message.text
+    try:
+        questions = parse_poll_from_file(file_content)
+    except ValueError as e:
+        translated_error_message = translate_exception(str(e))
+        logging.error(f"Ошибка при обработке текста с вопросами: {e}")
+        await message.answer(
+            f"❌ Произошла ошибка: {translated_error_message}. "
+            "Пожалуйста, исправьте текст и отправьте его снова.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return
+
+    for question_data in questions:
+        create_question(db, poll_id, question_data['text'], question_data['options'],
+                        question_data['correct_answers'], question_data['order'])
+
+    await message.answer(f"✅ Вопросы успешно добавлены к опросу!", reply_markup=ReplyKeyboardRemove())
+    await state.clear()
 
 
 @admin_router.message(Command("initialize_admin"))
@@ -322,27 +352,46 @@ async def process_poll_description(message: types.Message, state: FSMContext, db
 async def process_add_questions(callback: types.CallbackQuery, state: FSMContext, db: Session):
     poll_id = int(callback.data.split("_")[-1])
     await state.update_data(poll_id=poll_id)
-    await state.set_state(CreatePollStates.waiting_for_questions_file)
-    await callback.message.edit_text(
-        "Пожалуйста, отправьте текстовый файл с вопросами для опроса.\n\n"
-        "**Формат файла:**\n"
-        "Каждый вопрос должен начинаться с номера, за которым следует точка и пробел. "
-        "Варианты ответов должны начинаться с `+ ` (для правильных ответов) или `- ` (для неправильных ответов). "
-        "Вопросы должны быть разделены пустыми строками.\n\n"
-        "**Пример:**\n"
-        "```\n"
-        "1. Столица России?\n"
-        "+ Москва\n"
-        "- Санкт-Петербург\n"
-        "- Казань\n"
-        "\n"
-        "2. Какая река самая длинная в мире?\n"
-        "- Нил\n"
-        "+ Амазонка\n"
-        "- Янцзы\n"
-        "```",
-        parse_mode="Markdown"
-    )
+    if callback.data.startswith("add_questions_file_"):
+        await state.set_state(CreatePollStates.waiting_for_questions_file)
+        await callback.message.edit_text(
+            "Пожалуйста, отправьте текстовый файл с вопросами для опроса.\n\n"
+            "**Формат файла:**\n"
+            "Каждый вопрос должен начинаться с номера, за которым следует точка и пробел. "
+            "Варианты ответов должны начинаться с `+ ` (для правильных ответов) или `- ` (для неправильных ответов). "
+            "Вопросы должны быть разделены пустыми строками.\n\n"
+            "**Пример:**\n"
+            "```\n"
+            "1. Столица России?\n"
+            "+ Москва\n"
+            "- Санкт-Петербург\n"
+            "- Казань\n"
+            "\n"
+            "2. Какая река самая длинная в мире?\n"
+            "- Нил\n"
+            "+ Амазонка\n"
+            "- Янцзы\n"
+            "```",
+            parse_mode="Markdown"
+        )
+    elif callback.data.startswith("add_questions_text_"):
+        await state.set_state(CreatePollStates.waiting_for_questions_text)
+        await callback.message.edit_text(
+            "Пожалуйста, введите вопросы для опроса текстом, соблюдая формат:\n\n"
+            "**Формат текста:**\n"
+            "1. Вопрос 1\n"
+            "+ Верный ответ 1\n"
+            "- Неверный ответ 1\n"
+            "- Неверный ответ 2\n"
+            "\n"
+            "2. Вопрос 2\n"
+            "+ Верный ответ 1\n"
+            "- Неверный ответ 1\n"
+            "- Неверный ответ 2\n"
+            "\n"
+            "И так далее. Каждый вопрос с новой строки, варианты ответов начинаются с '+' или '-'.",
+            parse_mode="Markdown"
+        )
 
 
 @admin_router.message(CreatePollStates.waiting_for_questions_file, F.document)
