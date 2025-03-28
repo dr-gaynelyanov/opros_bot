@@ -72,15 +72,12 @@ def get_admin_control_keyboard() -> InlineKeyboardMarkup:
     """
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="➕ Добавить администратора", callback_data="add_admin"),
-                InlineKeyboardButton(text="➖ Удалить администратора", callback_data="remove_admin"),
-            ],
-            [
-                InlineKeyboardButton(text="📋 Список администраторов", callback_data="list_admins"),
-            ]
+            [InlineKeyboardButton(text="➕ Добавить администратора", callback_data="add_admin")],
+            [InlineKeyboardButton(text="➖ Удалить администратора", callback_data="remove_admin")],
+            [InlineKeyboardButton(text="📋 Список администраторов", callback_data="list_admins")],
         ]
     )
+
     return keyboard
 
 
