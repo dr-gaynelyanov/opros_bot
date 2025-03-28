@@ -82,11 +82,10 @@ def get_admin_count(db: Session) -> int:
     return db.query(User).filter(User.is_admin == True).count()
 
 
-def create_poll_db(db: Session, title: str, description: str, created_by: int):
+def create_poll_db(db: Session, title: str, description: str, created_by: int, access_code: str):
     """
     Создает новый опрос в базе данных.
     """
-    access_code = secrets.token_urlsafe(16)  # Generate a unique access code
     db_poll = Poll(
         title=title,
         description=description,

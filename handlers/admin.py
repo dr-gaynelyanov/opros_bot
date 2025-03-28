@@ -332,17 +332,63 @@ async def process_poll_title(message: types.Message, state: FSMContext):
 
 @admin_router.message(CreatePollStates.waiting_for_poll_description)
 async def process_poll_description(message: types.Message, state: FSMContext, db: Session):
+    await state.update_data(poll_description=message.text)
+    await state.set_state(CreatePollStates.waiting_for_custom_access_code)
+    await message.answer(
+        "Теперь, пожалуйста, введите код доступа к опросу. "
+        "Вы можете ввести свой код или нажать кнопку 'Сгенерировать случайный код'.",
+        reply_markup=get_access_code_keyboard()
+    )
+
+
+def get_access_code_keyboard() -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру с кнопкой для генерации случайного кода доступа.
+    """
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🎲 Сгенерировать случайный код", callback_data="generate_access_code")
+            ]
+        ]
+    )
+    return keyboard
+
+
+@admin_router.message(CreatePollStates.waiting_for_custom_access_code, F.text)
+async def process_custom_access_code(message: types.Message, state: FSMContext, db: Session):
     data = await state.get_data()
     poll_title = data.get('poll_title')
-    poll_description = message.text
+    poll_description = data.get('poll_description')
     user_id = message.from_user.id
+    custom_access_code = message.text.strip()  # Получаем введенный пользователем код доступа
 
-    poll = create_poll_db(db, title=poll_title, description=poll_description, created_by=user_id)
+    poll = create_poll_db(db, title=poll_title, description=poll_description, created_by=user_id, access_code=custom_access_code)
 
-    await state.update_data(poll_description=poll_description, poll_id=poll.id)
+    await state.update_data(poll_id=poll.id)
     await state.set_state(CreatePollStates.poll_created)
     await message.answer(
-        f"Опрос '{poll_title}' успешно создан!\n\n"
+        f"Опрос '{poll_title}' успешно создан с кодом доступа: {custom_access_code}!\n\n"
+        "Теперь вы можете добавить вопросы к опросу.",
+        reply_markup=get_add_questions_keyboard(poll.id)
+    )
+
+
+@admin_router.callback_query(lambda c: c.data == "generate_access_code", CreatePollStates.waiting_for_custom_access_code)
+async def process_generate_access_code(callback: types.CallbackQuery, state: FSMContext, db: Session):
+    data = await state.get_data()
+    poll_title = data.get('poll_title')
+    poll_description = data.get('poll_description')
+    user_id = callback.from_user.id
+    import uuid
+    generated_access_code = str(uuid.uuid4())[:8]  # Генерация случайного кода
+
+    poll = create_poll_db(db, title=poll_title, description=poll_description, created_by=user_id, access_code=generated_access_code)
+
+    await state.update_data(poll_id=poll.id)
+    await state.set_state(CreatePollStates.poll_created)
+    await callback.message.edit_text(
+        f"Опрос '{poll_title}' успешно создан со случайным кодом доступа: {generated_access_code}!\n\n"
         "Теперь вы можете добавить вопросы к опросу.",
         reply_markup=get_add_questions_keyboard(poll.id)
     )
