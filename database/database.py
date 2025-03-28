@@ -161,10 +161,13 @@ def get_answer_options(db: Session, question_id: int) -> List[str]:
 
 def get_users_by_poll_id(db: Session, poll_id: int) -> List[int]:
     """
-    Возвращает список ID пользователей, присоединившихся к опросу.
+    Возвращает список ID активных пользователей опроса (не завершивших его)
     """
-    return [response.user_id for response in db.query(PollResponse).filter(PollResponse.poll_id == poll_id).all()]
-
+    return [response.user_id for response in db.query(PollResponse)
+            .filter(
+                PollResponse.poll_id == poll_id,
+                PollResponse.completed_at == None  # noqa
+            ).all()]
 
 def create_question_response(db: Session, poll_id: int, user_id: int,
                              question_id: int, selected_answers: list) -> QuestionResponse:
