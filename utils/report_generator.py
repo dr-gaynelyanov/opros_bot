@@ -3,6 +3,7 @@ from openpyxl.styles import Font
 from database.database import get_users_by_poll_id
 from database.models import Question, QuestionResponse, PollResponse, User, Poll
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 import logging
 from io import BytesIO
@@ -89,11 +90,11 @@ def generate_excel_report(db: Session, poll_id: int) -> BytesIO:
             continue
 
         # Calculate total score
-        total_correct_answers = db.query(QuestionResponse).filter(
-            QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
-        total_questions = len(questions)
+        total_score = db.query(func.sum(QuestionResponse.score)).filter(
+            QuestionResponse.poll_response_id == poll_response.id).scalar() or 0.0
 
-        user_data = [f"{user.first_name} {user.last_name if user.last_name else ''}", user.username, user.email, total_correct_answers]
+
+        user_data = [f"{user.first_name} {user.last_name if user.last_name else ''}", user.username, user.email, total_score]
 
         # Get user's question responses
         for question in questions:

@@ -174,6 +174,7 @@ async def process_send_first_question(callback: types.CallbackQuery, bot: Bot, d
     )
 
     # Отправляем первый вопрос
+    #await send_next_question(callback, bot, db, state)
     await send_next_question(callback, bot, db, state)
 
 
@@ -314,6 +315,7 @@ async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Ses
 
         return
 
+    #await send_next_question(callback, bot, db, state)
     await send_next_question(callback, bot, db, state)
 
 

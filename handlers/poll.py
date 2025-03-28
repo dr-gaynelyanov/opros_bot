@@ -144,7 +144,17 @@ async def send_results_for_question(question: Question, db: Session, bot: Bot):
             return
 
         user_answers = ", ".join(response.selected_answers)
-        result = "✅ Правильно" if response.is_correct else "❌ Неправильно"
+        correct_answers_list = question.correct_answers
+        selected_answers_list = response.selected_answers
+        
+        correct_count = len(set(selected_answers_list) & set(correct_answers_list))
+        incorrect_count = len(selected_answers_list) - correct_count
+        
+        weight = 1 / len(correct_answers_list) if correct_answers_list else 0
+        score = (correct_count * weight) - (incorrect_count * weight)
+        score = max(0, score)
+        
+        result = f"Ваш балл: {score:.2f}"
 
         message = f"📊 Результат по вопросу:\n**Вопрос:** {question.text}\n**Ваш ответ:** {user_answers}\n**Правильный ответ:** {correct_answers}\n**Итог:** {result}"
 

@@ -66,7 +66,12 @@ async def process_access_code(message: Message, state: FSMContext, db: Session):
     print(poll)
 
     if poll:
-        create_poll_response(db, poll.id, message.from_user.id)
+        # Check if user already joined the poll
+        poll_response = create_poll_response(db, poll.id, message.from_user.id)
+        if poll_response is None:
+            await message.answer("Вы уже присоединились к этому опросу!")
+            return
+
         poll_description = poll.description if poll.description else "Описание отсутствует"
         await message.answer(f"✅ Вы успешно присоединились к опросу '{poll.title}'!\n\nОписание опроса: {poll_description}")
         # Пользователь получает вопрос только после того как админ его отправит

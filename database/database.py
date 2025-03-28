@@ -133,6 +133,11 @@ def create_poll_response(db: Session, poll_id: int, user_id: int):
     """
     Создает запись об участии пользователя в опросе.
     """
+    # Check if user already has a response for this poll
+    existing_response = db.query(PollResponse).filter(PollResponse.poll_id == poll_id, PollResponse.user_id == user_id).first()
+    if existing_response:
+        return None
+
     db_poll_response = PollResponse(
         poll_id=poll_id,
         user_id=user_id
@@ -170,8 +175,8 @@ def create_question_response(db: Session, poll_id: int, user_id: int,
     question = db.query(Question).filter(Question.id == question_id).first()
     correct_answers = question.correct_answers if question else []
 
-    # Определяем правильность ответа
-    is_correct = compare_answers(selected_answers, correct_answers)
+    # Вычисляем балл за ответ
+    score = compare_answers(selected_answers, correct_answers)
 
     # Получаем PollResponse
     poll_response = db.query(PollResponse) \
@@ -184,7 +189,7 @@ def create_question_response(db: Session, poll_id: int, user_id: int,
         poll_response_id=poll_response.id,
         question_id=question_id,
         selected_answers=selected_answers,
-        is_correct=is_correct
+        score=score
     )
     db.add(db_question_response)
     db.commit()
@@ -192,12 +197,18 @@ def create_question_response(db: Session, poll_id: int, user_id: int,
     return db_question_response
 
 
-def compare_answers(selected: list, correct: list) -> bool:
+def compare_answers(selected: list, correct: list) -> float:
     """
-    Сравнивает выбранные ответы с правильными
+    Сравнивает выбранные ответы с правильными и возвращает балл
     :param selected: список выбранных пользователем ответов
     :param correct: список правильных ответов
-    :return: True если ответы совпадают, иначе False
+    :return: балл за ответ
     """
-    # Приводим к множествам для сравнения (порядок не важен)
-    return set(selected) == set(correct)
+    if not correct:
+        return 0.0
+
+    correct_count = len(set(selected) & set(correct))
+    incorrect_count = len(selected) - correct_count
+    weight = 1 / len(correct)
+    score = (correct_count * weight) - (incorrect_count * weight)
+    return max(0, score)
