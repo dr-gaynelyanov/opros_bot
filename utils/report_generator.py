@@ -22,6 +22,10 @@ def generate_excel_report(db: Session, poll_id: int) -> BytesIO:
     # Create a new workbook
     workbook = openpyxl.Workbook()
 
+    # Remove default sheet
+    default_sheet = workbook.active
+    workbook.remove(default_sheet)
+
     # Create a new sheet for poll description
     description_sheet = workbook.create_sheet("Poll Description", 0)
 
