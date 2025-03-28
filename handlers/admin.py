@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from database.models import Poll, PollResponse, QuestionResponse
 from keyboards.reply import get_admin_start_inline_keyboard, get_add_questions_keyboard, \
     get_admin_question_control_keyboard, get_admin_control_keyboard
@@ -149,6 +151,8 @@ async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, 
     if not poll:
         await callback.message.edit_text("❌ Опрос не найден.")
         return
+    poll.is_active = True
+    db.commit()
     print(poll.access_code)
     await callback.message.edit_text(
         f"Код доступа к опросу {poll.title}:\n\n{poll.access_code}",
@@ -174,7 +178,6 @@ async def process_send_first_question(callback: types.CallbackQuery, bot: Bot, d
     )
 
     # Отправляем первый вопрос
-    #await send_next_question(callback, bot, db, state)
     await send_next_question(callback, bot, db, state)
 
 
@@ -261,12 +264,7 @@ async def process_finish_question(callback: types.CallbackQuery, db: Session, bo
         await callback.answer("Вопрос не найден", show_alert=True)
         return
 
-    # Завершаем прием ответов (пример логики)
-    question.is_active = False  # Требуется добавить это поле в модель
-    db.commit()
-
     await send_results_for_question(question, db, bot)
-    #Перенести в модуль keyboard/reply
     next_question_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➡️ Перейти к следующему вопросу", callback_data=f"next_question_{poll_id}")]
     ])
@@ -298,6 +296,23 @@ async def process_next_question(callback: types.CallbackQuery, bot: Bot, db: Ses
         poll_id = int(callback.data.split("_")[2])
         questions = db.query(Question).filter(Question.poll_id == poll_id).order_by(Question.order).all()
         user_ids = get_users_by_poll_id(db, poll_id)
+
+        # Set completed_at for all users
+        for user_id in user_ids:
+            poll_response = db.query(PollResponse).filter(
+                PollResponse.poll_id == poll_id,
+                PollResponse.user_id == user_id,
+                PollResponse.completed_at == None  # noqa
+            ).first()
+            if poll_response:
+                poll_response.completed_at = datetime.utcnow()
+                db.commit()
+
+        # Set poll is_active to False
+        poll = db.query(Poll).filter(Poll.id == poll_id).first()
+        if poll:
+            poll.is_active = False
+            db.commit()
 
         await callback.message.answer(text="Опрос завершен, можете посмотреть отчет")
 

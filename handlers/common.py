@@ -6,7 +6,7 @@ from keyboards.reply import get_contact_keyboard, get_admin_start_inline_keyboar
     get_registration_type_keyboard
 from states.user_states import UserRegistration
 from database.database import get_db, create_user, get_user_by_telegram_id, is_admin, get_poll_by_access_code, create_poll_response
-from database.models import Poll, Question
+from database.models import Poll, Question, PollResponse
 from handlers.poll import send_question
 import logging
 import re
@@ -66,6 +66,19 @@ async def process_access_code(message: Message, state: FSMContext, db: Session):
     print(poll)
 
     if poll:
+        if not poll.is_active:
+            await message.answer("❌ Этот опрос неактивен.")
+            return
+
+        poll_response = db.query(PollResponse).filter(
+            PollResponse.poll_id == poll.id,
+            PollResponse.user_id == message.from_user.id,
+            PollResponse.completed_at != None  # noqa
+        ).first()
+        if poll_response:
+            await message.answer("❌ Вы уже завершили этот опрос!")
+            return
+
         # Check if user already joined the poll
         poll_response = create_poll_response(db, poll.id, message.from_user.id)
         if poll_response is None:
