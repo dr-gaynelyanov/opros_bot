@@ -59,7 +59,7 @@ def generate_excel_report(db: Session, poll_id: int) -> BytesIO:
     sheet = workbook.create_sheet("Poll Results")
 
     # Define headers
-    headers = ["Имя и Фамилия", "Username", "Итоговый балл"]
+    headers = ["Имя и Фамилия", "Username", "Email", "Итоговый балл"]
     for question in questions:
         headers.append(f"Ответ {question.order}")
         headers.append(f"Правильный ответ {question.order}")
@@ -93,7 +93,7 @@ def generate_excel_report(db: Session, poll_id: int) -> BytesIO:
             QuestionResponse.poll_response_id == poll_response.id, QuestionResponse.is_correct == True).count()
         total_questions = len(questions)
 
-        user_data = [f"{user.first_name} {user.last_name if user.last_name else ''}", user.username, total_correct_answers]
+        user_data = [f"{user.first_name} {user.last_name if user.last_name else ''}", user.username, user.email, total_correct_answers]
 
         # Get user's question responses
         for question in questions:
