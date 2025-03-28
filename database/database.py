@@ -197,18 +197,42 @@ def create_question_response(db: Session, poll_id: int, user_id: int,
     return db_question_response
 
 
+import logging
+
+
 def compare_answers(selected: list, correct: list) -> float:
     """
-    Сравнивает выбранные ответы с правильными и возвращает балл
+    Сравнивает выбранные ответы с правильными и возвращает балл.
     :param selected: список выбранных пользователем ответов
     :param correct: список правильных ответов
     :return: балл за ответ
     """
+    # Логирование входных данных
+    logging.info(f"compare_answers: selected={selected}, correct={correct}")
+
+    # Если нет правильных ответов, возвращаем 0 баллов
     if not correct:
+        logging.info("compare_answers: no correct answers provided, returning score=0.0")
         return 0.0
 
+    # Подсчет количества правильных ответов
     correct_count = len(set(selected) & set(correct))
+    logging.info(f"compare_answers: correct_count={correct_count}")
+
+    # Подсчет количества неправильных ответов
     incorrect_count = len(selected) - correct_count
+    logging.info(f"compare_answers: incorrect_count={incorrect_count}")
+
+    # Вычисление веса одного правильного ответа
     weight = 1 / len(correct)
+    logging.info(f"compare_answers: weight={weight}")
+
+    # Вычисление балла
     score = (correct_count * weight) - (incorrect_count * weight)
-    return max(0, score)
+    logging.info(f"compare_answers: raw_score={score}")
+
+    # Ограничение балла минимальным значением 0
+    final_score = max(0.0, score)
+    logging.info(f"compare_answers: final_score={final_score}")
+
+    return final_score
