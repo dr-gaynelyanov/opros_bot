@@ -1,17 +1,17 @@
 import re
 
-def parse_poll_from_file(file_content):
-    """
-    Parses poll questions and answers from a text file content.
+import re
 
-    Returns:
-        list: A list of dictionaries, each representing a question with text, options, and correct_answers.
-    """
+import re
+
+import re
+
+def parse_poll_from_file(file_content):
     questions = []
     current_question = None
-    question_order = 0
+    question_order = 0  # Счетчик порядковых номеров
 
-    for line in file_content.strip().splitlines():
+    for line_number, line in enumerate(file_content.strip().splitlines(), start=1):
         line = line.strip()
         if not line:
             if current_question:
@@ -19,22 +19,32 @@ def parse_poll_from_file(file_content):
                 current_question = None
             continue
 
-        if re.match(r"^\d+\.\s", line):
+        if re.match(r"^\d+[.:)]\s", line):
             if current_question:
                 questions.append(current_question)
+            question_order += 1  # Увеличиваем порядковый номер
             current_question = {
-                "text": line.split(". ", 1)[1],
+                "text": line.split(" ", 1)[1],
                 "options": [],
                 "correct_answers": [],
-                "order": question_order + 1
+                "order": question_order  # Добавляем поле order
             }
-            question_order += 1
         elif current_question:
             if line.startswith("+ "):
                 current_question["options"].append(line[2:])
                 current_question["correct_answers"].append(line[2:])
             elif line.startswith("- "):
                 current_question["options"].append(line[2:])
+            else:
+                raise ValueError(
+                    f"Incorrect format on line {line_number}: "
+                    "expected '+', '-', or a numbered question."
+                )
+        else:
+            raise ValueError(
+                f"Incorrect format on line {line_number}: "
+                "expected a numbered question."
+            )
 
     if current_question:
         questions.append(current_question)

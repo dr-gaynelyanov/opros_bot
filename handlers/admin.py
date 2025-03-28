@@ -10,6 +10,7 @@ from database.database import get_db, get_user_by_telegram_id, is_admin, add_adm
 from sqlalchemy.orm import Session
 from states.admin_states import AdminStates
 from states.poll_states import CreatePollStates
+from utils.message_exception_translator import translate_exception
 from utils.poll_parser import parse_poll_from_file
 import logging
 from keyboards.reply import get_polls_keyboard, get_send_first_question_keyboard
@@ -362,12 +363,15 @@ async def process_questions_file(message: types.Message, state: FSMContext, db: 
     try:
         downloaded_file = await message.bot.download_file(file_path)
         file_content = downloaded_file.read().decode('utf-8')
-        questions = parse_poll_from_file(file_content)
-
-        if not questions:
+        try:
+            questions = parse_poll_from_file(file_content)
+        except ValueError as e:
+            translated_error_message = translate_exception(str(e))
+            logging.error(f"Ошибка при обработке файла с вопросами: {e}")
             await message.answer(
-                "❌ Ошибка: В файле не найдены вопросы в правильном формате. "
-                "Пожалуйста, проверьте формат файла и отправьте его снова."
+                f"❌ Произошла ошибка: {translated_error_message}. "
+                "Пожалуйста, исправьте файл и отправьте его снова.",
+                reply_markup=ReplyKeyboardRemove()
             )
             return
 
