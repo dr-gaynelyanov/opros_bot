@@ -61,7 +61,9 @@ async def process_join_poll(callback: CallbackQuery, state: FSMContext, db: Sess
 @common_router.message(UserRegistration.waiting_for_access_code)
 async def process_access_code(message: Message, state: FSMContext, db: Session):
     access_code = message.text.strip()
+    print(access_code)
     poll = get_poll_by_access_code(db, access_code)
+    print(poll)
 
     if poll:
         create_poll_response(db, poll.id, message.from_user.id)

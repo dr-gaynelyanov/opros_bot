@@ -118,10 +118,9 @@ async def process_select_poll(callback: types.CallbackQuery, state: FSMContext, 
     if not poll:
         await callback.message.edit_text("❌ Опрос не найден.")
         return
-
+    print(poll.access_code)
     await callback.message.edit_text(
         f"Код доступа к опросу {poll.title}:\n\n{poll.access_code}",
-        parse_mode="Markdown",
         reply_markup=get_send_first_question_keyboard(poll.id)
     )
 
