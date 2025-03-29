@@ -10,7 +10,7 @@ def translate_exception(exception_message):
         "Incorrect format on line {line_number}: expected a numbered question.":
             "Неверный формат в строке {line_number}: ожидался пронумерованный вопрос.",
         "Incorrect format on line {line_number}: expected '+', '-', or a numbered question.":
-            "Неверный формат в строке {line_number}: ожидался ответ ('+' или '-') или пронумерованный вопрос.",
+            "Неверный формат в строке {line_number}: ожидался ответ ('+' или '-') или пронумерованный вопрос",
         "Incorrect format: no correct answer for question '{question_text}'.":
             "Неверный формат: отсутствует правильный ответ для вопроса '{question_text}'.",
         "Unknown error":
