@@ -159,15 +159,28 @@ def get_answer_options(db: Session, question_id: int) -> List[str]:
         return []
 
 
-def get_users_by_poll_id(db: Session, poll_id: int) -> List[int]:
+def get_users_by_poll_id(db: Session, poll_id: int, is_poll_finished: bool = False) -> List[int]:
     """
-    Возвращает список ID активных пользователей опроса (не завершивших его)
+    Возвращает список ID пользователей опроса.
+
+    Args:
+        db: SQLAlchemy Session.
+        poll_id: ID опроса.
+        is_poll_finished: Флаг для фильтрации пользователей.
+            - False: Только активные пользователи (не завершившие опрос).
+            - True: Все пользователи, включая завершивших опрос.
+
+    Returns:
+        List[int]: Список ID пользователей.
     """
-    return [response.user_id for response in db.query(PollResponse)
-            .filter(
-                PollResponse.poll_id == poll_id,
-                PollResponse.completed_at == None  # noqa
-            ).all()]
+    query = db.query(PollResponse).filter(PollResponse.poll_id == poll_id)
+
+    if not is_poll_finished:
+        # Фильтруем только активные опросы (не завершенные)
+        query = query.filter(PollResponse.completed_at == None)  # noqa
+
+    # Извлекаем user_id из результатов запроса
+    return [response.user_id for response in query.all()]
 
 def create_question_response(db: Session, poll_id: int, user_id: int,
                              question_id: int, selected_answers: list) -> QuestionResponse:
